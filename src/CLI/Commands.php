@@ -284,8 +284,8 @@ class Commands {
 			WP_CLI::line( 'Status: ' . WP_CLI::colorize( '%rSkipped (S3 client not initialized)%n' ) );
 		} else {
 			WP_CLI::line( 'Testing connection to S3...' );
-			$test_start = microtime( true );
-			$test_result = $this->test_s3_connection();
+			$test_start    = microtime( true );
+			$test_result   = $this->test_s3_connection();
 			$test_duration = microtime( true ) - $test_start;
 
 			if ( $test_result['success'] ) {
@@ -311,7 +311,7 @@ class Commands {
 			WP_CLI::line( WP_CLI::colorize( '%C## Messages%n' ) );
 			foreach ( $this->init_errors as $msg ) {
 				$is_critical = false !== strpos( strtolower( $msg ), 'hetzner_storage_' ) ||
-							   false !== strpos( strtolower( $msg ), 'failed to initialize s3 client' );
+								false !== strpos( strtolower( $msg ), 'failed to initialize s3 client' );
 
 				if ( $is_critical ) {
 					WP_CLI::line( WP_CLI::colorize( '%r• ' . $msg . '%n' ) );
@@ -396,7 +396,7 @@ class Commands {
 		);
 
 		// Disable error handling temporarily
-		$attachment_id = media_handle_sideload( $file_array, 0, 'Hetzner Offload Test Image - ' . gmdate( 'Y-m-d H:i:s' ) );
+		$attachment_id   = media_handle_sideload( $file_array, 0, 'Hetzner Offload Test Image - ' . gmdate( 'Y-m-d H:i:s' ) );
 		$upload_duration = microtime( true ) - $upload_start;
 
 		if ( is_wp_error( $attachment_id ) ) {
@@ -416,7 +416,7 @@ class Commands {
 
 		// Get all files that should have been uploaded (main file + thumbnails)
 		$wp_upload_dir = wp_upload_dir();
-		$metadata = wp_get_attachment_metadata( $attachment_id );
+		$metadata      = wp_get_attachment_metadata( $attachment_id );
 		$attached_file = get_post_meta( $attachment_id, '_wp_attached_file', true );
 
 		$s3_files_to_check = array();
@@ -435,7 +435,7 @@ class Commands {
 
 			foreach ( $metadata['sizes'] as $size_name => $size_info ) {
 				if ( ! empty( $size_info['file'] ) ) {
-					$s3_key = 'uploads/' . ( $base_dir ? $base_dir . '/' : '' ) . $size_info['file'];
+					$s3_key                          = 'uploads/' . ( $base_dir ? $base_dir . '/' : '' ) . $size_info['file'];
 					$s3_files_to_check[ $size_name ] = preg_replace( '#/{2,}#', '/', $s3_key );
 				}
 			}
@@ -466,7 +466,7 @@ class Commands {
 		$wp_url = wp_get_attachment_url( $attachment_id );
 		WP_CLI::line( sprintf( 'WordPress URL: %s', $wp_url ) );
 
-		$has_cdn = defined( 'PERDIVES_MO_HETZNER_STORAGE_CDN_URL' ) && PERDIVES_MO_HETZNER_STORAGE_CDN_URL;
+		$has_cdn       = defined( 'PERDIVES_MO_HETZNER_STORAGE_CDN_URL' ) && PERDIVES_MO_HETZNER_STORAGE_CDN_URL;
 		$expected_base = $has_cdn ? PERDIVES_MO_HETZNER_STORAGE_CDN_URL : 'https://' . $this->s3_handler->get_bucket() . '.' . PERDIVES_MO_HETZNER_STORAGE_ENDPOINT;
 
 		if ( $this->plugin_enabled ) {
@@ -493,9 +493,9 @@ class Commands {
 		WP_CLI::line( WP_CLI::colorize( '%C## Step 5: Testing Public URL Accessibility%n' ) );
 
 		// Test the actual S3 URL (construct it directly)
-		$s3_key = $s3_files_to_check['main'];
+		$s3_key       = $s3_files_to_check['main'];
 		$relative_key = preg_replace( '#^uploads/#', '', $s3_key );
-		$s3_url = $this->s3_handler->get_url( $relative_key );
+		$s3_url       = $this->s3_handler->get_url( $relative_key );
 
 		$s3_result = $this->test_url_accessibility( $s3_url );
 		if ( $s3_result['accessible'] ) {
@@ -520,7 +520,7 @@ class Commands {
 		WP_CLI::line( WP_CLI::colorize( '%C## Step 6: Testing Local File Cleanup%n' ) );
 
 		$local_file_path = $wp_upload_dir['basedir'] . '/' . $attached_file;
-		$local_exists = file_exists( $local_file_path );
+		$local_exists    = file_exists( $local_file_path );
 
 		if ( $this->plugin_enabled ) {
 			// In full offload mode, local files should be deleted
@@ -613,9 +613,9 @@ class Commands {
 
 		// Create a gradient background
 		for ( $y = 0; $y < $height; $y++ ) {
-			$r = (int) ( 255 * ( $y / $height ) );
-			$g = (int) ( 100 + 155 * ( $y / $height ) );
-			$b = 255 - (int) ( 155 * ( $y / $height ) );
+			$r     = (int) ( 255 * ( $y / $height ) );
+			$g     = (int) ( 100 + 155 * ( $y / $height ) );
+			$b     = 255 - (int) ( 155 * ( $y / $height ) );
 			$color = imagecolorallocate( $image, $r, $g, $b );
 			imagefilledrectangle( $image, 0, $y, $width, $y + 1, $color );
 		}
@@ -624,12 +624,12 @@ class Commands {
 		$white = imagecolorallocate( $image, 255, 255, 255 );
 		$black = imagecolorallocate( $image, 0, 0, 0 );
 
-		$text = 'Hetzner Offload Test Image';
-		$font_size = 5;
-		$text_width = imagefontwidth( $font_size ) * strlen( $text );
+		$text        = 'Hetzner Offload Test Image';
+		$font_size   = 5;
+		$text_width  = imagefontwidth( $font_size ) * strlen( $text );
 		$text_height = imagefontheight( $font_size );
-		$x = (int) ( ( $width - $text_width ) / 2 );
-		$y = (int) ( ( $height - $text_height ) / 2 );
+		$x           = (int) ( ( $width - $text_width ) / 2 );
+		$y           = (int) ( ( $height - $text_height ) / 2 );
 
 		// Shadow
 		imagestring( $image, $font_size, $x + 2, $y + 2, $text, $black );
@@ -657,7 +657,7 @@ class Commands {
 
 		foreach ( $this->init_errors as $msg ) {
 			$is_critical = false !== strpos( strtolower( $msg ), 'hetzner_storage_' ) ||
-						   false !== strpos( strtolower( $msg ), 'failed to initialize s3 client' );
+							false !== strpos( strtolower( $msg ), 'failed to initialize s3 client' );
 
 			if ( $is_critical && ! $this->s3_handler->is_initialized() ) {
 				WP_CLI::error( $msg );
@@ -721,11 +721,11 @@ class Commands {
 	 */
 	private function initialize_sync_counters() {
 		return array(
-			'total_files_processed'  => 0,
-			'files_uploaded'         => 0,
-			'files_skipped_exists'   => 0,
-			'files_local_not_found'  => 0,
-			'files_s3_errors'        => 0,
+			'total_files_processed' => 0,
+			'files_uploaded'        => 0,
+			'files_skipped_exists'  => 0,
+			'files_local_not_found' => 0,
+			'files_s3_errors'       => 0,
 		);
 	}
 
@@ -736,20 +736,20 @@ class Commands {
 	 */
 	private function initialize_verify_counters() {
 		return array(
-			'wp_attachments_scanned'    => 0,
-			'wp_files_scanned'          => 0,
-			'local_files_exist'         => 0,
-			's3_missing'                => 0,
-			's3_exists_local_missing'   => 0,
-			's3_reuploaded'             => 0,
-			's3_reupload_failed'        => 0,
-			'local_cleaned'             => 0,
-			'local_cleanup_failed'      => 0,
-			'local_missing_s3_missing'  => 0,
-			's3_objects_scanned'        => 0,
-			's3_orphans_found'          => 0,
-			's3_orphans_deleted'        => 0,
-			's3_orphan_delete_failed'   => 0,
+			'wp_attachments_scanned'   => 0,
+			'wp_files_scanned'         => 0,
+			'local_files_exist'        => 0,
+			's3_missing'               => 0,
+			's3_exists_local_missing'  => 0,
+			's3_reuploaded'            => 0,
+			's3_reupload_failed'       => 0,
+			'local_cleaned'            => 0,
+			'local_cleanup_failed'     => 0,
+			'local_missing_s3_missing' => 0,
+			's3_objects_scanned'       => 0,
+			's3_orphans_found'         => 0,
+			's3_orphans_deleted'       => 0,
+			's3_orphan_delete_failed'  => 0,
 		);
 	}
 
@@ -967,8 +967,8 @@ class Commands {
 
 			foreach ( $attachment_files as $file_info ) {
 				++$counters['wp_files_scanned'];
-				$local_path = $file_info['local_path'];
-				$s3_key     = $file_info['s3_key'];
+				$local_path                 = $file_info['local_path'];
+				$s3_key                     = $file_info['s3_key'];
 				$s3_keys_from_wp[ $s3_key ] = true;
 
 				$local_exists = file_exists( $local_path );

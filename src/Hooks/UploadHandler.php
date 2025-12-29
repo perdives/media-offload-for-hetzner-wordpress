@@ -170,8 +170,8 @@ class UploadHandler {
 		}
 
 		// Delete true original if exists.
-		$wp_upload_dir      = wp_upload_dir();
-		$original_image     = wp_get_original_image_path( $attachment_id );
+		$wp_upload_dir  = wp_upload_dir();
+		$original_image = wp_get_original_image_path( $attachment_id );
 		if ( $original_image ) {
 			$relative_original = str_replace( $wp_upload_dir['basedir'] . '/', '', $original_image );
 			if ( $relative_original !== $wp_meta_path ) {
