@@ -1,0 +1,78 @@
+name: Build Release Package
+
+# This workflow builds production-ready assets and attaches them to draft releases.
+# It runs when code is merged to the release branch, creating a zip package that
+# can be tested before publishing.
+
+on:
+  push:
+    branches:
+      - release
+  workflow_dispatch:  # Allow manual trigger for rebuilding
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build and Attach Assets
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from plugin file
+        id: get_version
+        uses: perdives/wp-plugin-actions/get-plugin-version@v1
+        with:
+          plugin_file: 'media-offload-for-hetzner.php'
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-dev --optimize-autoloader
+
+      - name: Setup WP-CLI
+        uses: perdives/wp-plugin-actions/setup-wp-cli@v1
+
+      - name: Build plugin package
+        uses: perdives/wp-plugin-actions/build-plugin@v1
+        with:
+          plugin_slug: 'media-offload-for-hetzner'
+          version: ${{ steps.get_version.outputs.version }}
+
+      - name: Upload assets to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          TAG_NAME="v${VERSION}"
+
+          # Retry logic: wait for Release Drafter to create the draft
+          MAX_ATTEMPTS=12
+          ATTEMPT=0
+
+          echo "Looking for release $TAG_NAME..."
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+              echo "Found release $TAG_NAME"
+              echo "Uploading assets..."
+              gh release upload "$TAG_NAME" media-offload-for-hetzner-*.zip media-offload-for-hetzner-*.zip.sha256 --clobber
+              echo "Assets uploaded successfully"
+              exit 0
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+            echo "Attempt $ATTEMPT/$MAX_ATTEMPTS - Release not found yet, waiting..."
+            sleep 5
+          done
+
+          echo "Release $TAG_NAME not found after $MAX_ATTEMPTS attempts"
+          echo "Please check if Release Drafter workflow completed successfully"
+          exit 1

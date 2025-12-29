@@ -1,0 +1,36 @@
+# Composer
+/vendor/
+composer.lock
+
+# PHPCS
+.phpcs.cache
+phpcs.xml
+
+# IDE
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Build
+/build/
+/dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+/tests/coverage/
+/tests/_output/
+.phpunit.result.cache
+phpunit.xml

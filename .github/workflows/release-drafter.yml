@@ -1,0 +1,33 @@
+name: Release Drafter
+
+on:
+  push:
+    branches:
+      - release
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  draft-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release
+
+      - name: Get version from plugin file
+        id: get_version
+        uses: perdives/wp-plugin-actions/get-plugin-version@v1
+        with:
+          plugin_file: 'media-offload-for-hetzner.php'
+
+      - name: Create/update release draft
+        uses: release-drafter/release-drafter@v6
+        with:
+          version: ${{ steps.get_version.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

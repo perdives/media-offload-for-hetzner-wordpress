@@ -1,0 +1,59 @@
+name: Sync Release to Main
+
+# This workflow automatically syncs the release branch to main after a release is published.
+# Since the release is already reviewed and deployed, we push directly without creating a PR.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-to-main:
+    name: Sync release to main
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v4
+        with:
+          ref: release
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check if sync needed
+        id: check_sync
+        run: |
+          git fetch origin main:main
+
+          # Compare release and main branches
+          DIFF=$(git rev-list --left-right --count release...main)
+          AHEAD=$(echo $DIFF | cut -d' ' -f1)
+
+          if [ "$AHEAD" -eq 0 ]; then
+            echo "needs_sync=false" >> $GITHUB_OUTPUT
+            echo "Branches are in sync - no sync needed"
+          else
+            echo "needs_sync=true" >> $GITHUB_OUTPUT
+            echo "release is $AHEAD commit(s) ahead of main - syncing..."
+          fi
+
+      - name: Push release to main
+        if: steps.check_sync.outputs.needs_sync == 'true'
+        run: |
+          # Push release branch directly to main
+          git push origin release:main
+          echo "Successfully synced release to main"
+
+      - name: Already in sync
+        if: steps.check_sync.outputs.needs_sync == 'false'
+        run: |
+          echo "No sync needed - release and main are already in sync"

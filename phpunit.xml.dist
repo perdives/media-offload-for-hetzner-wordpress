@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
+    bootstrap="tests/bootstrap.php"
+    colors="true"
+    verbose="true"
+    stopOnFailure="false"
+    cacheResult="false">
+
+    <testsuites>
+        <testsuite name="Unit Tests">
+            <directory suffix="Test.php">tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Integration Tests">
+            <directory suffix="Test.php">tests/Integration</directory>
+        </testsuite>
+    </testsuites>
+
+    <coverage>
+        <include>
+            <directory suffix=".php">src</directory>
+        </include>
+        <exclude>
+            <directory>vendor</directory>
+            <directory>tests</directory>
+        </exclude>
+    </coverage>
+
+    <php>
+        <env name="WP_TESTS_PHPUNIT_POLYFILLS_PATH" value="vendor/yoast/phpunit-polyfills"/>
+
+        <!-- WordPress Test Installation (optional) -->
+        <!-- Copy this file to phpunit.xml and set your values there -->
+        <env name="WP_TEST_INSTALL_PATH" value=""/>
+
+        <!-- Hetzner Storage Test Credentials -->
+        <!-- Copy this file to phpunit.xml and fill in your test credentials -->
+        <env name="HETZNER_TEST_ENDPOINT" value=""/>
+        <env name="HETZNER_TEST_ACCESS_KEY" value=""/>
+        <env name="HETZNER_TEST_SECRET_KEY" value=""/>
+        <env name="HETZNER_TEST_BUCKET" value=""/>
+        <env name="HETZNER_TEST_CDN_URL" value=""/>
+    </php>
+</phpunit>

@@ -1,0 +1,32 @@
+# Version control
+.git
+.github
+.gitignore
+.distignore
+
+# Development dependencies
+node_modules
+composer.lock
+
+# Config files
+phpcs.xml
+phpcs.xml.dist
+
+# Documentation
+README.md
+CHANGELOG.md
+
+# Testing
+tests
+phpunit.xml
+phpunit.xml.dist
+.env.test
+.env.test.example
+
+# Cache files
+.phpcs.cache
+
+# Other
+*.sql
+*.tar.gz
+*.zip

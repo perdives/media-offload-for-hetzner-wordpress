@@ -1,0 +1,62 @@
+<?php
+/**
+ * Plugin Name: Offload to Hetzner Storage
+ * Plugin URI: https://perdives.com/plugins/media-offload-for-hetzner-wordpress
+ * Description: Offload WordPress media to Hetzner S3 compatible storage. Automatically syncs your media library to Hetzner's S3-compatible object storage.
+ * Version: 1.0.0
+ * Requires at least: 5.0
+ * Requires PHP: 7.4
+ * Author: Perdives
+ * Author URI: https://perdives.com
+ * License: GPL v2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: media-offload-for-hetzner
+ * Domain Path: /languages
+ *
+ * @package HetznerOffload
+ * @copyright 2025 Perdives
+ * 
+ * This program is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+/**
+ * Display admin notice when autoloader is missing.
+ */
+function perdives_mo_missing_autoloader_notice() {
+	echo '<div class="error"><p>';
+	echo '<strong>Hetzner Offload:</strong> Composer autoloader not found. ';
+	echo 'Please run <code>composer install</code> in the plugin directory.';
+	echo '</p></div>';
+}
+
+/**
+ * Initialize the Hetzner Offload plugin.
+ */
+function perdives_mo_init() {
+	HetznerOffload\Plugin::get_instance();
+}
+
+// Require Composer autoloader.
+if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
+	require_once __DIR__ . '/vendor/autoload.php';
+	add_action( 'plugins_loaded', 'perdives_mo_init' );
+} else {
+	add_action( 'admin_notices', 'perdives_mo_missing_autoloader_notice' );
+	return;
+}

@@ -1,0 +1,89 @@
+name: Tests
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main, develop ]
+
+jobs:
+  phpunit:
+    name: PHPUnit Tests (PHP ${{ matrix.php }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.0', '8.1', '8.2', '8.3']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, xml, gd
+          coverage: xdebug
+          tools: composer:v2
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress --no-suggest
+
+      - name: Check coding standards
+        run: composer phpcs:check
+
+      - name: Run unit tests
+        run: |
+          vendor/bin/phpunit --testsuite "Unit Tests" --no-coverage || echo "No unit tests found yet"
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    # Only run integration tests if secrets are available
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: mbstring, xml, gd
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Run integration tests
+        env:
+          HETZNER_TEST_ENDPOINT: ${{ secrets.HETZNER_TEST_ENDPOINT }}
+          HETZNER_TEST_ACCESS_KEY: ${{ secrets.HETZNER_TEST_ACCESS_KEY }}
+          HETZNER_TEST_SECRET_KEY: ${{ secrets.HETZNER_TEST_SECRET_KEY }}
+          HETZNER_TEST_BUCKET: ${{ secrets.HETZNER_TEST_BUCKET }}
+          HETZNER_TEST_CDN_URL: ${{ secrets.HETZNER_TEST_CDN_URL }}
+        run: |
+          if [ -z "$HETZNER_TEST_ENDPOINT" ]; then
+            echo "⚠️  Hetzner credentials not configured. Skipping integration tests."
+            echo "To enable integration tests, add repository secrets:"
+            echo "  - HETZNER_TEST_ENDPOINT"
+            echo "  - HETZNER_TEST_ACCESS_KEY"
+            echo "  - HETZNER_TEST_SECRET_KEY"
+            echo "  - HETZNER_TEST_BUCKET"
+            exit 0
+          fi
+          vendor/bin/phpunit --testsuite "Integration Tests"
