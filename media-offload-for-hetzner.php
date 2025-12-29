@@ -54,5 +54,15 @@ if ( ! perdives_check_php_version( __FILE__, '8.1' ) ) {
 // PHP version is supported - safe to load autoloader and dependencies.
 require_once __DIR__ . '/vendor/autoload.php';
 
+// Initialize Plugin Update Checker.
+$perdives_mo_update_checker = Puc_v4_Factory::buildUpdateChecker(
+	'https://github.com/perdives/media-offload-for-hetzner-wordpress',
+	__FILE__,
+	'media-offload-for-hetzner'
+);
+
+// Set the branch to check for updates (optional - defaults to 'main').
+$perdives_mo_update_checker->setBranch( 'main' );
+
 // Initialize the plugin.
 add_action( 'plugins_loaded', 'perdives_mo_init' );

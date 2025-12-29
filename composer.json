@@ -13,7 +13,8 @@
     "require": {
         "php": ">=8.1",
         "aws/aws-sdk-php": "^3.337",
-        "perdives/php-support-notices-for-wordpress": "dev-main"
+        "perdives/php-support-notices-for-wordpress": "dev-main",
+        "yahnis-elsts/plugin-update-checker": "^5.4"
     },
     "require-dev": {
         "mockery/mockery": "^1.6",
