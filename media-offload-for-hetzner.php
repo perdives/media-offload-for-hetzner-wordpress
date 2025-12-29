@@ -55,7 +55,7 @@ if ( ! perdives_check_php_version( __FILE__, '8.1' ) ) {
 require_once __DIR__ . '/vendor/autoload.php';
 
 // Initialize Plugin Update Checker.
-$perdives_mo_update_checker = Puc_v4_Factory::buildUpdateChecker(
+$perdives_mo_update_checker = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
 	'https://github.com/perdives/media-offload-for-hetzner-wordpress',
 	__FILE__,
 	'media-offload-for-hetzner'
