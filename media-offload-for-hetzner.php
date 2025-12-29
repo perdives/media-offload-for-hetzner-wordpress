@@ -61,8 +61,8 @@ $perdives_mo_update_checker = Puc_v4_Factory::buildUpdateChecker(
 	'media-offload-for-hetzner'
 );
 
-// Set the branch to check for updates (optional - defaults to 'main').
-$perdives_mo_update_checker->setBranch( 'main' );
+// Check for GitHub releases instead of branch commits.
+$perdives_mo_update_checker->getVcsApi()->enableReleaseAssets();
 
 // Initialize the plugin.
 add_action( 'plugins_loaded', 'perdives_mo_init' );
