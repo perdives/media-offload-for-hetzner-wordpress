@@ -1,0 +1,73 @@
+/**
+ * Hetzner Offload Settings Page Styles
+ */
+
+.wrap .perdives-mo-title {
+	margin-bottom: 12px;
+}
+
+.perdives-mo-section {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	margin-bottom: 20px;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.perdives-mo-section h2 {
+	margin: 0;
+	padding-bottom: 10px;
+	border-bottom: 1px solid #dcdcde;
+	padding: 10px;
+}
+
+.perdives-mo-section__inner {
+	padding: 12px;
+}
+
+.perdives-mo-section h3 {
+	font-size: 16px;
+	font-weight: 400;
+	color: #1d2327;
+	margin-bottom: 0;
+}
+
+.perdives-mo-section h3:first-child {
+	margin-top: 0;
+}
+
+.perdives-mo-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-bottom: 20px;
+}
+
+.perdives-mo-table.system-status {
+	margin-bottom: 0;
+}
+
+.perdives-mo-table th,
+.perdives-mo-table td {
+	padding: 12px 0;
+	text-align: left;
+	vertical-align: top;
+}
+
+.perdives-mo-table th {
+	width: 240px;
+	font-weight: 600;
+	color: #1d2327;
+}
+
+.perdives-mo-table td {
+	color: #50575e;
+}
+
+.perdives-mo-table tr:last-child th,
+.perdives-mo-table tr:last-child td {
+	border-bottom: none;
+}
+
+.perdives-mo-section .notice {
+	margin: 15px 0;
+}

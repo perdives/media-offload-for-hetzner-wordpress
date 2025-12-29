@@ -11,6 +11,7 @@ use HetznerOffload\Storage\S3Handler;
 use HetznerOffload\Hooks\UrlRewriter;
 use HetznerOffload\Hooks\UploadHandler;
 use HetznerOffload\CLI\Commands;
+use HetznerOffload\Admin\SettingsPage;
 
 /**
  * Main plugin class that orchestrates all components.
@@ -44,6 +45,13 @@ class Plugin {
 	 * @var Commands
 	 */
 	private $cli_commands;
+
+	/**
+	 * Settings Page instance
+	 *
+	 * @var SettingsPage
+	 */
+	private $settings_page;
 
 	/**
 	 * Whether the plugin is fully enabled
@@ -114,6 +122,7 @@ class Plugin {
 		$this->url_rewriter   = new UrlRewriter( $this->s3_handler );
 		$this->upload_handler = new UploadHandler( $this->s3_handler );
 		$this->cli_commands   = new Commands( $this->s3_handler, $this->init_errors, $this->plugin_enabled );
+		$this->settings_page  = new SettingsPage( $this->s3_handler, $this->init_errors, $this->plugin_enabled );
 
 		// Register hooks.
 		$this->register_hooks();
@@ -131,6 +140,9 @@ class Plugin {
 
 		// Register WP-CLI commands.
 		$this->cli_commands->register();
+
+		// Register settings page.
+		$this->settings_page->register();
 	}
 
 	/**

@@ -8,6 +8,7 @@
 namespace HetznerOffload\CLI;
 
 use HetznerOffload\Storage\S3Handler;
+use HetznerOffload\Services\VerificationService;
 use Aws\Exception\AwsException;
 use WP_CLI;
 use WP_Query;
@@ -23,6 +24,13 @@ class Commands {
 	 * @var S3Handler
 	 */
 	private $s3_handler;
+
+	/**
+	 * Verification Service instance
+	 *
+	 * @var VerificationService
+	 */
+	private $verification_service;
 
 	/**
 	 * Initialization errors
@@ -46,9 +54,10 @@ class Commands {
 	 * @param bool      $plugin_enabled Whether plugin is fully enabled.
 	 */
 	public function __construct( S3Handler $s3_handler, array $init_errors, $plugin_enabled ) {
-		$this->s3_handler     = $s3_handler;
-		$this->init_errors    = $init_errors;
-		$this->plugin_enabled = $plugin_enabled;
+		$this->s3_handler           = $s3_handler;
+		$this->init_errors          = $init_errors;
+		$this->plugin_enabled       = $plugin_enabled;
+		$this->verification_service = new VerificationService( $s3_handler, $init_errors, $plugin_enabled );
 	}
 
 	/**
@@ -99,7 +108,15 @@ class Commands {
 		$force_upload = isset( $assoc_args['force'] );
 
 		// Pre-fetch S3 keys for efficient checking.
-		$existing_s3_keys = $this->get_existing_s3_keys( $force_upload );
+		if ( ! $force_upload ) {
+			WP_CLI::line( WP_CLI::colorize( '%CFetching list of existing S3 objects under uploads/ prefix (this may take a while for large buckets)...%n' ) );
+		}
+		$existing_s3_keys = $this->verification_service->get_existing_s3_keys( $force_upload );
+		if ( ! $force_upload && $existing_s3_keys !== null ) {
+			WP_CLI::line( WP_CLI::colorize( sprintf( '%%GFound %d existing objects in S3 under uploads/ prefix.%%n', count( $existing_s3_keys ) ) ) );
+		} elseif ( $force_upload ) {
+			WP_CLI::line( WP_CLI::colorize( '%YSkipping S3 object listing due to --force flag.%n' ) );
+		}
 
 		if ( $dry_run ) {
 			WP_CLI::warning( WP_CLI::colorize( '%YDry run mode enabled. No files will be uploaded.%n' ) );
@@ -108,10 +125,10 @@ class Commands {
 			WP_CLI::warning( WP_CLI::colorize( '%YForce upload mode enabled. All files will be re-uploaded.%n' ) );
 		}
 
-		$counters = $this->initialize_sync_counters();
+		$counters = $this->verification_service->initialize_sync_counters();
 
 		// Get total attachments count.
-		$total_attachments = $this->get_total_attachments();
+		$total_attachments = $this->verification_service->get_total_attachments();
 		if ( $total_attachments === 0 ) {
 			WP_CLI::success( WP_CLI::colorize( '%GNo attachments found to sync.%n' ) );
 			return;
@@ -122,7 +139,7 @@ class Commands {
 
 		// Process attachments in batches.
 		$progress = $this->create_progress_bar( 'Syncing attachments', $total_attachments );
-		$this->process_attachments_batch( $dry_run, $force_upload, $existing_s3_keys, $counters, $progress );
+		$this->verification_service->process_attachments_batch( $dry_run, $force_upload, $existing_s3_keys, $counters, $progress );
 
 		if ( $progress ) {
 			$progress->finish();
@@ -179,7 +196,7 @@ class Commands {
 
 		// Pre-fetch all S3 keys.
 		WP_CLI::line( WP_CLI::colorize( "%CFetching list of all S3 objects under 'uploads/' prefix...%n" ) );
-		$existing_s3_keys = $this->get_all_s3_keys_lookup();
+		$existing_s3_keys = $this->verification_service->get_all_s3_keys_lookup();
 		if ( $existing_s3_keys === null ) {
 			WP_CLI::error( 'Could not retrieve S3 object list. Aborting verification.' );
 			return;
@@ -187,14 +204,43 @@ class Commands {
 
 		WP_CLI::line( sprintf( "S3 object list fetch complete. Found %d objects in S3 under 'uploads/' prefix.", count( $existing_s3_keys ) ) );
 
-		$counters        = $this->initialize_verify_counters();
+		$counters        = $this->verification_service->initialize_verify_counters();
 		$s3_keys_from_wp = array();
 
 		// Phase 1: Verify WordPress media files against S3.
-		$this->verify_wordpress_media( $existing_s3_keys, $counters, $s3_keys_from_wp, $dry_run, $reupload_missing, $cleanup_local );
+		WP_CLI::line( WP_CLI::colorize( '%CPhase 1: Verifying WordPress media files against S3...%n' ) );
+		$attachment_ids    = $this->verification_service->get_all_attachment_ids();
+		$total_attachments = count( $attachment_ids );
+		if ( $total_attachments > 0 ) {
+			WP_CLI::line( sprintf( 'Found %d media attachments in WordPress. Now verifying each one against the S3 object list...', $total_attachments ) );
+			$progress          = $this->create_progress_bar( 'Verifying WP attachments', $total_attachments );
+			$progress_callback = $progress ? array( $progress, 'tick' ) : null;
+			$this->verification_service->verify_wordpress_media( $existing_s3_keys, $counters, $s3_keys_from_wp, $dry_run, $reupload_missing, $cleanup_local, $progress_callback );
+			if ( $progress ) {
+				$progress->finish();
+			}
+		} else {
+			WP_CLI::line( 'No attachments found in WordPress media library.' );
+		}
 
 		// Phase 2: Check for S3 orphans.
-		$this->verify_s3_orphans( $existing_s3_keys, $s3_keys_from_wp, $counters, $dry_run, $delete_s3_orphans );
+		WP_CLI::line( WP_CLI::colorize( '%CPhase 2: Checking for orphan S3 files...%n' ) );
+		WP_CLI::line( sprintf( 'Comparing %d S3 objects against WordPress records to find orphans...', count( $existing_s3_keys ) ) );
+		$progress_orphans  = $this->create_progress_bar( 'Verifying S3 objects', count( $existing_s3_keys ) );
+		$progress_callback = $progress_orphans ? array( $progress_orphans, 'tick' ) : null;
+		$s3_orphans        = $this->verification_service->verify_s3_orphans( $existing_s3_keys, $s3_keys_from_wp, $counters, $dry_run, $delete_s3_orphans, $progress_callback );
+		if ( $progress_orphans ) {
+			$progress_orphans->finish();
+		}
+
+		if ( ! empty( $s3_orphans ) ) {
+			WP_CLI::warning( sprintf( 'Found %d potential S3 orphan objects.', count( $s3_orphans ) ) );
+			if ( ! $delete_s3_orphans ) {
+				$this->list_s3_orphans( $s3_orphans );
+			}
+		} else {
+			WP_CLI::line( WP_CLI::colorize( "%GNo S3 orphan objects found under 'uploads/' prefix.%n" ) );
+		}
 
 		$this->display_verify_summary( $counters, $dry_run );
 	}
@@ -287,7 +333,7 @@ class Commands {
 		} else {
 			WP_CLI::line( 'Testing connection to S3...' );
 			$test_start    = microtime( true );
-			$test_result   = $this->test_s3_connection();
+			$test_result   = $this->verification_service->test_s3_connection();
 			$test_duration = microtime( true ) - $test_start;
 
 			if ( $test_result['success'] ) {
@@ -380,7 +426,7 @@ class Commands {
 
 		// Step 1: Create test image file.
 		WP_CLI::line( WP_CLI::colorize( '%C## Step 1: Creating Test Image%n' ) );
-		if ( ! $this->create_test_image( $local_test_path ) ) {
+		if ( ! $this->verification_service->create_test_image( $local_test_path ) ) {
 			WP_CLI::error( 'Failed to create test image file.' );
 			return;
 		}
@@ -497,7 +543,7 @@ class Commands {
 		$relative_key = preg_replace( '#^uploads/#', '', $s3_key );
 		$s3_url       = $this->s3_handler->get_url( $relative_key );
 
-		$s3_result = $this->test_url_accessibility( $s3_url );
+		$s3_result = $this->verification_service->test_url_accessibility( $s3_url );
 		if ( $s3_result['accessible'] ) {
 			WP_CLI::line( sprintf( 'S3 URL:  %s (HTTP %d)', WP_CLI::colorize( '%GAccessible%n' ), $s3_result['status_code'] ) );
 		} else {
@@ -507,7 +553,7 @@ class Commands {
 		}
 
 		// Test WordPress URL (which may be rewritten to CDN or S3).
-		$wp_result = $this->test_url_accessibility( $wp_url );
+		$wp_result = $this->verification_service->test_url_accessibility( $wp_url );
 		if ( $wp_result['accessible'] ) {
 			WP_CLI::line( sprintf( 'WP URL:  %s (HTTP %d)', WP_CLI::colorize( '%GAccessible%n' ), $wp_result['status_code'] ) );
 		} else {
@@ -597,51 +643,6 @@ class Commands {
 	 * @param string $file_path Path where to create the image.
 	 * @return bool True on success, false on failure.
 	 */
-	private function create_test_image( $file_path ) {
-		// Create a 800x600 test image.
-		$width  = 800;
-		$height = 600;
-		$image  = imagecreatetruecolor( $width, $height );
-
-		if ( ! $image ) {
-			return false;
-		}
-
-		// Create a gradient background.
-		for ( $y = 0; $y < $height; $y++ ) {
-			$r     = (int) ( 255 * ( $y / $height ) );
-			$g     = (int) ( 100 + 155 * ( $y / $height ) );
-			$b     = 255 - (int) ( 155 * ( $y / $height ) );
-			$color = imagecolorallocate( $image, $r, $g, $b );
-			imagefilledrectangle( $image, 0, $y, $width, $y + 1, $color );
-		}
-
-		// Add some text.
-		$white = imagecolorallocate( $image, 255, 255, 255 );
-		$black = imagecolorallocate( $image, 0, 0, 0 );
-
-		$text        = 'Hetzner Offload Test Image';
-		$font_size   = 5;
-		$text_width  = imagefontwidth( $font_size ) * strlen( $text );
-		$text_height = imagefontheight( $font_size );
-		$x           = (int) ( ( $width - $text_width ) / 2 );
-		$y           = (int) ( ( $height - $text_height ) / 2 );
-
-		// Shadow.
-		imagestring( $image, $font_size, $x + 2, $y + 2, $text, $black );
-		// Text.
-		imagestring( $image, $font_size, $x, $y, $text, $white );
-
-		// Add timestamp.
-		$timestamp = gmdate( 'Y-m-d H:i:s' ) . ' UTC';
-		imagestring( $image, 3, 10, $height - 20, $timestamp, $white );
-
-		// Save as JPEG.
-		$success = imagejpeg( $image, $file_path, 90 );
-		imagedestroy( $image );
-
-		return $success;
-	}
 
 	/**
 	 * Display initialization messages
@@ -669,103 +670,30 @@ class Commands {
 	 * @param bool $force_upload Whether force upload is enabled.
 	 * @return array|null Array of S3 keys or null if fetching failed.
 	 */
-	private function get_existing_s3_keys( $force_upload ) {
-		if ( $force_upload ) {
-			WP_CLI::line( WP_CLI::colorize( '%YSkipping S3 object listing due to --force flag.%n' ) );
-			return null;
-		}
-
-		WP_CLI::line( WP_CLI::colorize( '%CFetching list of existing S3 objects under uploads/ prefix (this may take a while for large buckets)...%n' ) );
-
-		$existing_keys = array();
-		$objects       = $this->s3_handler->list_objects( 'uploads/' );
-
-		foreach ( $objects as $object ) {
-			$existing_keys[ $object['Key'] ] = true;
-		}
-
-		WP_CLI::line( WP_CLI::colorize( sprintf( '%%GFound %d existing objects in S3 under uploads/ prefix.%%n', count( $existing_keys ) ) ) );
-
-		return $existing_keys;
-	}
 
 	/**
 	 * Get all S3 keys as lookup array
 	 *
 	 * @return array|null
 	 */
-	private function get_all_s3_keys_lookup() {
-		$objects = $this->s3_handler->list_objects( 'uploads/' );
-		if ( empty( $objects ) && ! is_array( $objects ) ) {
-			return null;
-		}
-
-		$lookup = array();
-		foreach ( $objects as $object ) {
-			if ( isset( $object['Key'] ) ) {
-				$lookup[ $object['Key'] ] = true;
-			}
-		}
-
-		return $lookup;
-	}
 
 	/**
 	 * Initialize sync counters
 	 *
 	 * @return array
 	 */
-	private function initialize_sync_counters() {
-		return array(
-			'total_files_processed' => 0,
-			'files_uploaded'        => 0,
-			'files_skipped_exists'  => 0,
-			'files_local_not_found' => 0,
-			'files_s3_errors'       => 0,
-		);
-	}
 
 	/**
 	 * Initialize verify counters
 	 *
 	 * @return array
 	 */
-	private function initialize_verify_counters() {
-		return array(
-			'wp_attachments_scanned'   => 0,
-			'wp_files_scanned'         => 0,
-			'local_files_exist'        => 0,
-			's3_missing'               => 0,
-			's3_exists_local_missing'  => 0,
-			's3_reuploaded'            => 0,
-			's3_reupload_failed'       => 0,
-			'local_cleaned'            => 0,
-			'local_cleanup_failed'     => 0,
-			'local_missing_s3_missing' => 0,
-			's3_objects_scanned'       => 0,
-			's3_orphans_found'         => 0,
-			's3_orphans_deleted'       => 0,
-			's3_orphan_delete_failed'  => 0,
-		);
-	}
 
 	/**
 	 * Get total attachments count
 	 *
 	 * @return int
 	 */
-	private function get_total_attachments() {
-		$query = new WP_Query(
-			array(
-				'post_type'      => 'attachment',
-				'post_status'    => 'inherit',
-				'posts_per_page' => 1,
-				'fields'         => 'ids',
-			)
-		);
-
-		return $query->found_posts;
-	}
 
 	/**
 	 * Create progress bar
@@ -792,46 +720,6 @@ class Commands {
 	 * @param array       $counters         Counters array (passed by reference).
 	 * @param object|null $progress         Progress bar object.
 	 */
-	private function process_attachments_batch( $dry_run, $force_upload, $existing_s3_keys, &$counters, $progress ) {
-		$batch_size = 100;
-		$paged      = 1;
-
-		do {
-			$query = new WP_Query(
-				array(
-					'post_type'      => 'attachment',
-					'post_status'    => 'inherit',
-					'posts_per_page' => $batch_size,
-					'paged'          => $paged,
-				)
-			);
-
-			if ( empty( $query->posts ) ) {
-				break;
-			}
-
-			foreach ( $query->posts as $attachment ) {
-				$this->process_attachment(
-					$attachment->ID,
-					$dry_run,
-					$force_upload,
-					$existing_s3_keys,
-					$counters
-				);
-
-				if ( $progress ) {
-					$progress->tick();
-				}
-			}
-
-			++$paged;
-
-			// Free memory.
-			if ( function_exists( '\WP_CLI\Utils\stop_the_insanity' ) ) {
-				\WP_CLI\Utils\stop_the_insanity();
-			}
-		} while ( $query->max_num_pages >= $paged );
-	}
 
 	/**
 	 * Process a single attachment
@@ -842,50 +730,6 @@ class Commands {
 	 * @param array|null $existing_s3_keys Existing S3 keys.
 	 * @param array      $counters         Counters array (passed by reference).
 	 */
-	private function process_attachment( $attachment_id, $dry_run, $force_upload, $existing_s3_keys, &$counters ) {
-		$wp_upload_dir    = wp_upload_dir();
-		$base_upload_path = $wp_upload_dir['basedir'];
-
-		$primary_wp_meta_path = get_post_meta( $attachment_id, '_wp_attached_file', true );
-		if ( ! $primary_wp_meta_path ) {
-			return;
-		}
-
-		// Process primary file.
-		$local_primary_path = $base_upload_path . '/' . $primary_wp_meta_path;
-		$s3_primary_key     = 'uploads/' . preg_replace( '#/{2,}#', '/', $primary_wp_meta_path );
-		$this->process_file_upload( $local_primary_path, $s3_primary_key, $attachment_id, $dry_run, $force_upload, $existing_s3_keys, $counters );
-
-		// Process true original if different.
-		$true_original_path = wp_get_original_image_path( $attachment_id );
-		if ( $true_original_path && $true_original_path !== $local_primary_path ) {
-			$relative_original = str_replace( $base_upload_path . '/', '', $true_original_path );
-			$s3_original_key   = 'uploads/' . preg_replace( '#/{2,}#', '/', $relative_original );
-			$this->process_file_upload( $true_original_path, $s3_original_key, $attachment_id, $dry_run, $force_upload, $existing_s3_keys, $counters );
-		}
-
-		// Process thumbnails.
-		$metadata = wp_get_attachment_metadata( $attachment_id );
-		if ( isset( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
-			$primary_dir = dirname( $primary_wp_meta_path );
-			if ( $primary_dir === '.' ) {
-				$primary_dir = '';
-			}
-
-			foreach ( $metadata['sizes'] as $size_name => $size_info ) {
-				if ( empty( $size_info['file'] ) ) {
-					continue;
-				}
-
-				$thumbnail_filename = $size_info['file'];
-				$local_thumb_path   = $base_upload_path . '/' . ( $primary_dir ? $primary_dir . '/' : '' ) . $thumbnail_filename;
-				$s3_thumb_key       = 'uploads/' . ( $primary_dir ? $primary_dir . '/' : '' ) . $thumbnail_filename;
-				$s3_thumb_key       = preg_replace( '#/{2,}#', '/', $s3_thumb_key );
-
-				$this->process_file_upload( $local_thumb_path, $s3_thumb_key, $attachment_id, $dry_run, $force_upload, $existing_s3_keys, $counters );
-			}
-		}
-	}
 
 	/**
 	 * Process file upload to S3
@@ -898,37 +742,6 @@ class Commands {
 	 * @param array|null $existing_s3_keys  Existing S3 keys.
 	 * @param array      $counters          Counters array (passed by reference).
 	 */
-	private function process_file_upload( $local_path, $s3_key, $attachment_id, $dry_run, $force_upload, $existing_s3_keys, &$counters ) {
-		++$counters['total_files_processed'];
-
-		if ( ! file_exists( $local_path ) ) {
-			++$counters['files_local_not_found'];
-			return;
-		}
-
-		// Check if file already exists on S3.
-		if ( ! $force_upload ) {
-			if ( $existing_s3_keys !== null && isset( $existing_s3_keys[ $s3_key ] ) ) {
-				++$counters['files_skipped_exists'];
-				return;
-			} elseif ( $existing_s3_keys === null && $this->s3_handler->object_exists( $s3_key ) ) {
-				++$counters['files_skipped_exists'];
-				return;
-			}
-		}
-
-		if ( $dry_run ) {
-			++$counters['files_uploaded'];
-			return;
-		}
-
-		// Upload file.
-		if ( $this->s3_handler->upload_file( $local_path, $s3_key ) ) {
-			++$counters['files_uploaded'];
-		} else {
-			++$counters['files_s3_errors'];
-		}
-	}
 
 	/**
 	 * Verify WordPress media files against S3
@@ -940,58 +753,6 @@ class Commands {
 	 * @param bool  $reupload_missing Whether to reupload missing files.
 	 * @param bool  $cleanup_local    Whether to cleanup local files.
 	 */
-	private function verify_wordpress_media( $existing_s3_keys, &$counters, &$s3_keys_from_wp, $dry_run, $reupload_missing, $cleanup_local ) {
-		WP_CLI::line( WP_CLI::colorize( '%CPhase 1: Verifying WordPress media files against S3...%n' ) );
-
-		$attachment_ids    = $this->get_all_attachment_ids();
-		$total_attachments = count( $attachment_ids );
-
-		if ( $total_attachments === 0 ) {
-			WP_CLI::line( 'No attachments found in WordPress media library.' );
-			return;
-		}
-
-		WP_CLI::line( sprintf( 'Found %d media attachments in WordPress. Now verifying each one against the S3 object list...', $total_attachments ) );
-		$progress = $this->create_progress_bar( 'Verifying WP attachments', $total_attachments );
-
-		$wp_upload_dir    = wp_upload_dir();
-		$base_upload_path = $wp_upload_dir['basedir'];
-
-		foreach ( $attachment_ids as $attachment_id ) {
-			++$counters['wp_attachments_scanned'];
-			$attachment_files = $this->get_attachment_files( $attachment_id, $base_upload_path );
-
-			foreach ( $attachment_files as $file_info ) {
-				++$counters['wp_files_scanned'];
-				$local_path                 = $file_info['local_path'];
-				$s3_key                     = $file_info['s3_key'];
-				$s3_keys_from_wp[ $s3_key ] = true;
-
-				$local_exists = file_exists( $local_path );
-				$s3_exists    = isset( $existing_s3_keys[ $s3_key ] );
-
-				$this->handle_file_verification(
-					$local_exists,
-					$s3_exists,
-					$local_path,
-					$s3_key,
-					$attachment_id,
-					$counters,
-					$dry_run,
-					$reupload_missing,
-					$cleanup_local
-				);
-			}
-
-			if ( $progress ) {
-				$progress->tick();
-			}
-		}
-
-		if ( $progress ) {
-			$progress->finish();
-		}
-	}
 
 	/**
 	 * Handle file verification
@@ -1006,42 +767,6 @@ class Commands {
 	 * @param bool   $reupload_missing Whether to reupload missing files.
 	 * @param bool   $cleanup_local    Whether to cleanup local files.
 	 */
-	private function handle_file_verification( $local_exists, $s3_exists, $local_path, $s3_key, $attachment_id, &$counters, $dry_run, $reupload_missing, $cleanup_local ) {
-		// Count local files that exist.
-		if ( $local_exists ) {
-			++$counters['local_files_exist'];
-		}
-
-		if ( $local_exists && ! $s3_exists ) {
-			++$counters['s3_missing'];
-			if ( $reupload_missing ) {
-				if ( $dry_run ) {
-					++$counters['s3_reuploaded'];
-				} elseif ( $this->s3_handler->upload_file( $local_path, $s3_key ) ) {
-					++$counters['s3_reuploaded'];
-					if ( $cleanup_local && wp_delete_file( $local_path ) ) {
-						++$counters['local_cleaned'];
-					}
-				} else {
-					++$counters['s3_reupload_failed'];
-				}
-			}
-		} elseif ( $local_exists && $s3_exists ) {
-			if ( $cleanup_local && ! $reupload_missing ) {
-				if ( $dry_run ) {
-					++$counters['local_cleaned'];
-				} elseif ( wp_delete_file( $local_path ) ) {
-					++$counters['local_cleaned'];
-				} else {
-					++$counters['local_cleanup_failed'];
-				}
-			}
-		} elseif ( ! $local_exists && $s3_exists ) {
-			++$counters['s3_exists_local_missing'];
-		} elseif ( ! $local_exists && ! $s3_exists ) {
-			++$counters['local_missing_s3_missing'];
-		}
-	}
 
 	/**
 	 * Verify S3 orphans
@@ -1052,42 +777,6 @@ class Commands {
 	 * @param bool  $dry_run           Dry run mode.
 	 * @param bool  $delete_s3_orphans Whether to delete orphans.
 	 */
-	private function verify_s3_orphans( $existing_s3_keys, $s3_keys_from_wp, &$counters, $dry_run, $delete_s3_orphans ) {
-		WP_CLI::line( WP_CLI::colorize( '%CPhase 2: Checking for orphan S3 files...%n' ) );
-
-		$counters['s3_objects_scanned'] = count( $existing_s3_keys );
-		WP_CLI::line( sprintf( 'Comparing %d S3 objects against WordPress records to find orphans...', $counters['s3_objects_scanned'] ) );
-
-		$s3_orphans = array();
-		$progress   = $this->create_progress_bar( 'Verifying S3 objects', $counters['s3_objects_scanned'] );
-
-		foreach ( array_keys( $existing_s3_keys ) as $s3_key ) {
-			if ( ! isset( $s3_keys_from_wp[ $s3_key ] ) ) {
-				$s3_orphans[] = $s3_key;
-				++$counters['s3_orphans_found'];
-			}
-
-			if ( $progress ) {
-				$progress->tick();
-			}
-		}
-
-		if ( $progress ) {
-			$progress->finish();
-		}
-
-		if ( ! empty( $s3_orphans ) ) {
-			WP_CLI::warning( sprintf( 'Found %d potential S3 orphan objects.', $counters['s3_orphans_found'] ) );
-
-			if ( $delete_s3_orphans ) {
-				$this->delete_s3_orphans( $s3_orphans, $counters, $dry_run );
-			} else {
-				$this->list_s3_orphans( $s3_orphans );
-			}
-		} else {
-			WP_CLI::line( WP_CLI::colorize( "%GNo S3 orphan objects found under 'uploads/' prefix.%n" ) );
-		}
-	}
 
 	/**
 	 * Delete S3 orphans
@@ -1096,17 +785,6 @@ class Commands {
 	 * @param array $counters Counters array (passed by reference).
 	 * @param bool  $dry_run  Dry run mode.
 	 */
-	private function delete_s3_orphans( $orphans, &$counters, $dry_run ) {
-		foreach ( $orphans as $orphan_key ) {
-			if ( $dry_run ) {
-				++$counters['s3_orphans_deleted'];
-			} elseif ( $this->s3_handler->delete_object( $orphan_key ) ) {
-				++$counters['s3_orphans_deleted'];
-			} else {
-				++$counters['s3_orphan_delete_failed'];
-			}
-		}
-	}
 
 	/**
 	 * List S3 orphans
@@ -1134,49 +812,12 @@ class Commands {
 	 * @param string $url URL to test.
 	 * @return array Result with 'accessible' and 'status_code' keys.
 	 */
-	private function test_url_accessibility( $url ) {
-		$response = wp_remote_head(
-			$url,
-			array(
-				'timeout'     => 10,
-				'redirection' => 5,
-				'sslverify'   => true,
-			)
-		);
-
-		if ( is_wp_error( $response ) ) {
-			return array(
-				'accessible'  => false,
-				'status_code' => 0,
-				'error'       => $response->get_error_message(),
-			);
-		}
-
-		$status_code = wp_remote_retrieve_response_code( $response );
-
-		return array(
-			'accessible'  => $status_code >= 200 && $status_code < 300,
-			'status_code' => $status_code,
-		);
-	}
 
 	/**
 	 * Get all attachment IDs
 	 *
 	 * @return array
 	 */
-	private function get_all_attachment_ids() {
-		$query = new WP_Query(
-			array(
-				'post_type'      => 'attachment',
-				'post_status'    => 'inherit',
-				'posts_per_page' => -1,
-				'fields'         => 'ids',
-			)
-		);
-
-		return $query->posts;
-	}
 
 	/**
 	 * Get attachment files (primary, original, thumbnails)
@@ -1185,112 +826,12 @@ class Commands {
 	 * @param string $base_upload_path Base upload path.
 	 * @return array
 	 */
-	private function get_attachment_files( $attachment_id, $base_upload_path ) {
-		$files                = array();
-		$primary_wp_meta_path = get_post_meta( $attachment_id, '_wp_attached_file', true );
-
-		if ( ! $primary_wp_meta_path ) {
-			return $files;
-		}
-
-		// Primary file.
-		$local_primary_path = $base_upload_path . '/' . $primary_wp_meta_path;
-		$s3_primary_key     = 'uploads/' . preg_replace( '#/{2,}#', '/', $primary_wp_meta_path );
-		$files[]            = array(
-			'local_path' => $local_primary_path,
-			's3_key'     => $s3_primary_key,
-			'type'       => 'primary',
-		);
-
-		// True original if different.
-		$true_original_path = wp_get_original_image_path( $attachment_id );
-		if ( $true_original_path && $true_original_path !== $local_primary_path ) {
-			$relative_original = str_replace( $base_upload_path . '/', '', $true_original_path );
-			$s3_original_key   = 'uploads/' . preg_replace( '#/{2,}#', '/', $relative_original );
-			$files[]           = array(
-				'local_path' => $true_original_path,
-				's3_key'     => $s3_original_key,
-				'type'       => 'true_original',
-			);
-		}
-
-		// Thumbnails.
-		$metadata = wp_get_attachment_metadata( $attachment_id );
-		if ( isset( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
-			$primary_dir = dirname( $primary_wp_meta_path );
-			if ( $primary_dir === '.' ) {
-				$primary_dir = '';
-			}
-
-			foreach ( $metadata['sizes'] as $size_name => $size_info ) {
-				if ( empty( $size_info['file'] ) ) {
-					continue;
-				}
-
-				$thumbnail_filename = $size_info['file'];
-				$local_thumb_path   = $base_upload_path . '/' . ( $primary_dir ? $primary_dir . '/' : '' ) . $thumbnail_filename;
-				$s3_thumb_key       = 'uploads/' . ( $primary_dir ? $primary_dir . '/' : '' ) . $thumbnail_filename;
-				$s3_thumb_key       = preg_replace( '#/{2,}#', '/', $s3_thumb_key );
-				$files[]            = array(
-					'local_path' => $local_thumb_path,
-					's3_key'     => $s3_thumb_key,
-					'type'       => $size_name,
-				);
-			}
-		}
-
-		return $files;
-	}
 
 	/**
 	 * Test S3 connection
 	 *
 	 * @return array Test result with 'success', 'error', 'error_code', 'error_detail', and 'object_count' keys.
 	 */
-	private function test_s3_connection() {
-		try {
-			$client = $this->s3_handler->get_client();
-			if ( ! $client ) {
-				return array(
-					'success' => false,
-					'error'   => 'S3 client not available',
-				);
-			}
-
-			// Try to list objects with a small limit to test connection.
-			$result = $client->listObjectsV2(
-				array(
-					'Bucket'  => $this->s3_handler->get_bucket(),
-					'Prefix'  => 'uploads/',
-					'MaxKeys' => 10,
-				)
-			);
-
-			$object_count = isset( $result['KeyCount'] ) ? (int) $result['KeyCount'] : 0;
-
-			return array(
-				'success'      => true,
-				'object_count' => $object_count,
-			);
-		} catch ( \Aws\Exception\AwsException $e ) {
-			$error_code    = $e->getAwsErrorCode();
-			$status_code   = $e->getStatusCode();
-			$error_message = $this->get_friendly_error_message( $error_code, $status_code );
-
-			return array(
-				'success'      => false,
-				'error'        => $error_message,
-				'error_code'   => $error_code,
-				'error_detail' => $e->getMessage(),
-			);
-		} catch ( \Exception $e ) {
-			return array(
-				'success'      => false,
-				'error'        => 'Connection error',
-				'error_detail' => $e->getMessage(),
-			);
-		}
-	}
 
 	/**
 	 * Get friendly error message from AWS error code
@@ -1299,22 +840,6 @@ class Commands {
 	 * @param int    $status_code  HTTP status code.
 	 * @return string Friendly error message.
 	 */
-	private function get_friendly_error_message( $error_code, $status_code ) {
-		$messages = array(
-			'AccessDenied'          => 'Access denied - check your credentials and bucket permissions',
-			'NoSuchBucket'          => 'Bucket not found - verify the bucket name exists',
-			'InvalidAccessKeyId'    => 'Invalid access key - check your PERDIVES_MO_HETZNER_STORAGE_ACCESS_KEY',
-			'SignatureDoesNotMatch' => 'Invalid secret key - check your PERDIVES_MO_HETZNER_STORAGE_SECRET_KEY',
-			'PermanentRedirect'     => 'Wrong endpoint - check your PERDIVES_MO_HETZNER_STORAGE_ENDPOINT region',
-			'RequestTimeout'        => 'Connection timeout - check your network connection',
-		);
-
-		if ( isset( $messages[ $error_code ] ) ) {
-			return $messages[ $error_code ];
-		}
-
-		return sprintf( '%s (HTTP %d)', $error_code ? $error_code : 'Unknown error', $status_code );
-	}
 
 	/**
 	 * Display sync summary
