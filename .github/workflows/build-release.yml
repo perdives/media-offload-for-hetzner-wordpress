@@ -24,7 +24,7 @@ jobs:
 
       - name: Get version from plugin file
         id: get_version
-        uses: perdives/wp-plugin-actions/get-plugin-version@v1
+        uses: perdives/wp-plugin-actions/get-plugin-version@v0.1
         with:
           plugin_file: 'media-offload-for-hetzner.php'
 
@@ -38,10 +38,10 @@ jobs:
         run: composer install --no-dev --optimize-autoloader
 
       - name: Setup WP-CLI
-        uses: perdives/wp-plugin-actions/setup-wp-cli@v1
+        uses: perdives/wp-plugin-actions/setup-wp-cli@v0.1
 
       - name: Build plugin package
-        uses: perdives/wp-plugin-actions/build-plugin@v1
+        uses: perdives/wp-plugin-actions/build-plugin@v0.1
         with:
           plugin_slug: 'media-offload-for-hetzner'
           version: ${{ steps.get_version.outputs.version }}

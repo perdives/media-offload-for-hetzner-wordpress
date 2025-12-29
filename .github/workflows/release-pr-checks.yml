@@ -32,7 +32,7 @@ jobs:
 
       - name: Run PHPCS
         id: phpcs
-        uses: perdives/wp-plugin-actions/phpcs-check@v1
+        uses: perdives/wp-plugin-actions/phpcs-check@v0.1
         with:
           command: 'composer phpcs:check'
           fail_on_error: false
@@ -107,7 +107,7 @@ jobs:
 
       - name: Run Plugin Check
         id: plugin-check
-        uses: perdives/wp-plugin-actions/plugin-check@v1
+        uses: perdives/wp-plugin-actions/plugin-check@v0.1
         with:
           fail_on_error: false
 

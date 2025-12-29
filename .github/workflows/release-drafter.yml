@@ -21,7 +21,7 @@ jobs:
 
       - name: Get version from plugin file
         id: get_version
-        uses: perdives/wp-plugin-actions/get-plugin-version@v1
+        uses: perdives/wp-plugin-actions/get-plugin-version@v0.1
         with:
           plugin_file: 'media-offload-for-hetzner.php'
 
