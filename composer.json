@@ -11,8 +11,9 @@
     ],
     "homepage": "https://perdives.com/plugins/media-offload-for-hetzner-wordpress",
     "require": {
-        "php": ">=7.4",
-        "aws/aws-sdk-php": "^3.337"
+        "php": ">=8.1",
+        "aws/aws-sdk-php": "^3.337",
+        "perdives/php-support-notices-for-wordpress": "dev-main"
     },
     "require-dev": {
         "squizlabs/php_codesniffer": "^3.7",
@@ -48,6 +49,12 @@
             "phpcs --config-set default_standard WordPress"
         ]
     },
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/perdives/php-support-notices-for-wordpress.git"
+        }
+    ],
     "config": {
         "allow-plugins": {
             "dealerdirect/phpcodesniffer-composer-installer": true
@@ -56,9 +63,10 @@
         "optimize-autoloader": true,
         "classmap-authoritative": false,
         "platform": {
-            "php": "7.4.33"
-        }
+            "php": "8.1.0"
+        },
+        "platform-check": false
     },
-    "minimum-stability": "stable",
+    "minimum-stability": "dev",
     "prefer-stable": true
 }

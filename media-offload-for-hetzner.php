@@ -5,7 +5,7 @@
  * Description: Offload WordPress media to Hetzner S3 compatible storage. Automatically syncs your media library to Hetzner's S3-compatible object storage.
  * Version: 1.0.0
  * Requires at least: 5.0
- * Requires PHP: 7.4
+ * Requires PHP: 8.1
  * Author: Perdives
  * Author URI: https://perdives.com
  * License: GPL v2 or later
@@ -36,27 +36,23 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Display admin notice when autoloader is missing.
- */
-function perdives_mo_missing_autoloader_notice() {
-	echo '<div class="error"><p>';
-	echo '<strong>Hetzner Offload:</strong> Composer autoloader not found. ';
-	echo 'Please run <code>composer install</code> in the plugin directory.';
-	echo '</p></div>';
-}
-
-/**
  * Initialize the Hetzner Offload plugin.
  */
 function perdives_mo_init() {
 	HetznerOffload\Plugin::get_instance();
 }
 
-// Require Composer autoloader.
-if ( file_exists( __DIR__ . '/vendor/autoload.php' ) ) {
-	require_once __DIR__ . '/vendor/autoload.php';
-	add_action( 'plugins_loaded', 'perdives_mo_init' );
-} else {
-	add_action( 'admin_notices', 'perdives_mo_missing_autoloader_notice' );
+// Use the Perdives PHP Support Notices package to check compatibility BEFORE loading autoloader.
+// This prevents fatal parse errors from Composer dependencies that require PHP 8.1+ syntax.
+require_once __DIR__ . '/vendor/perdives/php-support-notices-for-wordpress/standalone-checker.php';
+
+if ( ! perdives_check_php_version( __FILE__, '8.9' ) ) {
+	// PHP version not supported - admin notice hooked, stop loading.
 	return;
 }
+
+// PHP version is supported - safe to load autoloader and dependencies.
+require_once __DIR__ . '/vendor/autoload.php';
+
+// Initialize the plugin.
+add_action( 'plugins_loaded', 'perdives_mo_init' );
