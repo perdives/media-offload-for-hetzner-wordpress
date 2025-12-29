@@ -46,7 +46,7 @@ function perdives_mo_init() {
 // This prevents fatal parse errors from Composer dependencies that require PHP 8.1+ syntax.
 require_once __DIR__ . '/vendor/perdives/php-support-notices-for-wordpress/standalone-checker.php';
 
-if ( ! perdives_check_php_version( __FILE__, '8.9' ) ) {
+if ( ! perdives_check_php_version( __FILE__, '8.1' ) ) {
 	// PHP version not supported - admin notice hooked, stop loading.
 	return;
 }
