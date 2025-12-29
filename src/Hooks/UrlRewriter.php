@@ -91,7 +91,7 @@ class UrlRewriter {
 		}
 
 		$base_dir = dirname( $original_file_key );
-		if ( '.' === $base_dir || DIRECTORY_SEPARATOR === $base_dir ) {
+		if ( $base_dir === '.' || $base_dir === DIRECTORY_SEPARATOR ) {
 			$base_dir = '';
 		} else {
 			$base_dir .= '/';

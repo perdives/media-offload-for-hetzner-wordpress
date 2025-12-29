@@ -90,7 +90,7 @@ class Commands {
 		}
 
 		if ( ! $this->plugin_enabled ) {
-			WP_CLI::warning( WP_CLI::colorize( '%YNote: URL rewriting and local file deletion for new uploads are currently disabled (PERDIVES_MO_OFFLOAD_ENABLED is not explicitly true). New uploads will be synced to S3 and kept locally. This command will also sync/manage files on S3 directly.%n' ) );
+			WP_CLI::warning( WP_CLI::colorize( '%YNote: Media offload is currently disabled (PERDIVES_MO_OFFLOAD_ENABLED is not set to true). New uploads are NOT being synced to S3. This command will sync/manage files on S3 directly.%n' ) );
 		}
 
 		WP_CLI::line( WP_CLI::colorize( '%CStarting Hetzner S3 library synchronization...%n' ) );
@@ -112,7 +112,7 @@ class Commands {
 
 		// Get total attachments count.
 		$total_attachments = $this->get_total_attachments();
-		if ( 0 === $total_attachments ) {
+		if ( $total_attachments === 0 ) {
 			WP_CLI::success( WP_CLI::colorize( '%GNo attachments found to sync.%n' ) );
 			return;
 		}
@@ -180,7 +180,7 @@ class Commands {
 		// Pre-fetch all S3 keys.
 		WP_CLI::line( WP_CLI::colorize( "%CFetching list of all S3 objects under 'uploads/' prefix...%n" ) );
 		$existing_s3_keys = $this->get_all_s3_keys_lookup();
-		if ( null === $existing_s3_keys ) {
+		if ( $existing_s3_keys === null ) {
 			WP_CLI::error( 'Could not retrieve S3 object list. Aborting verification.' );
 			return;
 		}
@@ -209,7 +209,7 @@ class Commands {
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Associative arguments.
 	 */
-	public function info( $args, $assoc_args ) {
+	public function info( $args, $assoc_args ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed
 		WP_CLI::line( WP_CLI::colorize( '%M===================================================%n' ) );
 		WP_CLI::line( WP_CLI::colorize( '%BHetzner Offload - Connection Information%n' ) );
 		WP_CLI::line( WP_CLI::colorize( '%M===================================================%n' ) );
@@ -258,14 +258,16 @@ class Commands {
 		}
 
 		if ( $this->plugin_enabled ) {
-			WP_CLI::line( 'Mode:      ' . WP_CLI::colorize( '%GFull offload mode%n' ) . ' (PERDIVES_MO_OFFLOAD_ENABLED=true)' );
+			WP_CLI::line( 'Mode:      ' . WP_CLI::colorize( '%GEnabled%n' ) . ' (PERDIVES_MO_OFFLOAD_ENABLED=true)' );
+			WP_CLI::line( '           - Automatic S3 uploads: Enabled' );
 			WP_CLI::line( '           - URL rewriting: Enabled' );
 			WP_CLI::line( '           - Local file deletion: Enabled' );
 		} elseif ( $this->s3_handler->is_initialized() ) {
-			WP_CLI::line( 'Mode:      ' . WP_CLI::colorize( '%YSync-only mode%n' ) . ' (PERDIVES_MO_OFFLOAD_ENABLED not set to true)' );
+			WP_CLI::line( 'Mode:      ' . WP_CLI::colorize( '%rDisabled%n' ) . ' (PERDIVES_MO_OFFLOAD_ENABLED not set to true)' );
+			WP_CLI::line( '           - Automatic S3 uploads: Disabled' );
 			WP_CLI::line( '           - URL rewriting: Disabled' );
 			WP_CLI::line( '           - Local file deletion: Disabled' );
-			WP_CLI::line( '           - Files are synced to S3 but kept locally' );
+			WP_CLI::line( '           - Use WP-CLI commands to manually sync files' );
 		} else {
 			WP_CLI::line( 'Mode:      ' . WP_CLI::colorize( '%rDisabled%n' ) . ' (S3 client not initialized)' );
 		}
@@ -310,8 +312,8 @@ class Commands {
 			WP_CLI::line( '' );
 			WP_CLI::line( WP_CLI::colorize( '%C## Messages%n' ) );
 			foreach ( $this->init_errors as $msg ) {
-				$is_critical = false !== strpos( strtolower( $msg ), 'hetzner_storage_' ) ||
-								false !== strpos( strtolower( $msg ), 'failed to initialize s3 client' );
+				$is_critical = strpos( strtolower( $msg ), 'hetzner_storage_' ) !== false ||
+								strpos( strtolower( $msg ), 'failed to initialize s3 client' ) !== false;
 
 				if ( $is_critical ) {
 					WP_CLI::line( WP_CLI::colorize( '%r• ' . $msg . '%n' ) );
@@ -360,7 +362,7 @@ class Commands {
 
 		$keep_file = isset( $assoc_args['keep'] );
 
-		// Check if we have WordPress functions available
+		// Check if we have WordPress functions available.
 		if ( ! function_exists( 'wp_insert_attachment' ) ) {
 			WP_CLI::error( 'WordPress media functions not available.' );
 			return;
@@ -373,7 +375,7 @@ class Commands {
 
 		WP_CLI::line( WP_CLI::colorize( '%C## Test Configuration%n' ) );
 		WP_CLI::line( sprintf( 'Test file:  %s', $test_filename ) );
-		WP_CLI::line( sprintf( 'Mode:       %s', $this->plugin_enabled ? 'Full offload (URLs rewritten, local files deleted)' : 'Sync-only (files kept locally)' ) );
+		WP_CLI::line( sprintf( 'Mode:       %s', $this->plugin_enabled ? 'Enabled (automatic offload active)' : 'Disabled (manual sync only via WP-CLI)' ) );
 		WP_CLI::line( '' );
 
 		// Step 1: Create test image file.
@@ -389,20 +391,20 @@ class Commands {
 		WP_CLI::line( WP_CLI::colorize( '%C## Step 2: Uploading via WordPress Media Library%n' ) );
 		$upload_start = microtime( true );
 
-		// Use WordPress media_handle_sideload to simulate media upload
+		// Use WordPress media_handle_sideload to simulate media upload.
 		$file_array = array(
 			'name'     => $test_filename,
 			'tmp_name' => $local_test_path,
 		);
 
-		// Disable error handling temporarily
+		// Disable error handling temporarily.
 		$attachment_id   = media_handle_sideload( $file_array, 0, 'Hetzner Offload Test Image - ' . gmdate( 'Y-m-d H:i:s' ) );
 		$upload_duration = microtime( true ) - $upload_start;
 
 		if ( is_wp_error( $attachment_id ) ) {
 			WP_CLI::error( 'Failed to upload through WordPress: ' . $attachment_id->get_error_message() );
 			if ( file_exists( $local_test_path ) ) {
-				unlink( $local_test_path );
+				wp_delete_file( $local_test_path );
 			}
 			return;
 		}
@@ -414,22 +416,22 @@ class Commands {
 		// Step 3: Verify files were uploaded to S3.
 		WP_CLI::line( WP_CLI::colorize( '%C## Step 3: Verifying S3 Upload%n' ) );
 
-		// Get all files that should have been uploaded (main file + thumbnails)
+		// Get all files that should have been uploaded (main file + thumbnails).
 		$wp_upload_dir = wp_upload_dir();
 		$metadata      = wp_get_attachment_metadata( $attachment_id );
 		$attached_file = get_post_meta( $attachment_id, '_wp_attached_file', true );
 
 		$s3_files_to_check = array();
 
-		// Main file
+		// Main file.
 		if ( $attached_file ) {
 			$s3_files_to_check['main'] = 'uploads/' . preg_replace( '#/{2,}#', '/', $attached_file );
 		}
 
-		// Thumbnails
+		// Thumbnails.
 		if ( isset( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
 			$base_dir = dirname( $attached_file );
-			if ( '.' === $base_dir ) {
+			if ( $base_dir === '.' ) {
 				$base_dir = '';
 			}
 
@@ -470,8 +472,8 @@ class Commands {
 		$expected_base = $has_cdn ? PERDIVES_MO_HETZNER_STORAGE_CDN_URL : 'https://' . $this->s3_handler->get_bucket() . '.' . PERDIVES_MO_HETZNER_STORAGE_ENDPOINT;
 
 		if ( $this->plugin_enabled ) {
-			// In full offload mode, URLs should be rewritten to S3/CDN
-			if ( false !== strpos( $wp_url, $expected_base ) ) {
+			// In full offload mode, URLs should be rewritten to S3/CDN.
+			if ( strpos( $wp_url, $expected_base ) !== false ) {
 				WP_CLI::line( WP_CLI::colorize( '%G✓ URL successfully rewritten to S3/CDN%n' ) );
 				if ( $has_cdn ) {
 					WP_CLI::line( '  Using CDN URL' );
@@ -481,18 +483,16 @@ class Commands {
 			} else {
 				WP_CLI::warning( 'URL was not rewritten to S3/CDN. Expected to contain: ' . $expected_base );
 			}
-		} else {
-			// In sync-only mode, URLs should still point to local
-			if ( false !== strpos( $wp_url, $wp_upload_dir['baseurl'] ) ) {
-				WP_CLI::line( WP_CLI::colorize( '%Y✓ URL points to local (expected in sync-only mode)%n' ) );
-			}
+		} elseif ( strpos( $wp_url, $wp_upload_dir['baseurl'] ) !== false ) {
+			// In sync-only mode, URLs should still point to local.
+			WP_CLI::line( WP_CLI::colorize( '%Y✓ URL points to local (expected in sync-only mode)%n' ) );
 		}
 		WP_CLI::line( '' );
 
 		// Step 5: Test public URL accessibility.
 		WP_CLI::line( WP_CLI::colorize( '%C## Step 5: Testing Public URL Accessibility%n' ) );
 
-		// Test the actual S3 URL (construct it directly)
+		// Test the actual S3 URL (construct it directly).
 		$s3_key       = $s3_files_to_check['main'];
 		$relative_key = preg_replace( '#^uploads/#', '', $s3_key );
 		$s3_url       = $this->s3_handler->get_url( $relative_key );
@@ -506,7 +506,7 @@ class Commands {
 			return;
 		}
 
-		// Test WordPress URL (which may be rewritten to CDN or S3)
+		// Test WordPress URL (which may be rewritten to CDN or S3).
 		$wp_result = $this->test_url_accessibility( $wp_url );
 		if ( $wp_result['accessible'] ) {
 			WP_CLI::line( sprintf( 'WP URL:  %s (HTTP %d)', WP_CLI::colorize( '%GAccessible%n' ), $wp_result['status_code'] ) );
@@ -522,20 +522,16 @@ class Commands {
 		$local_file_path = $wp_upload_dir['basedir'] . '/' . $attached_file;
 		$local_exists    = file_exists( $local_file_path );
 
-		if ( $this->plugin_enabled ) {
-			// In full offload mode, local files should be deleted
-			if ( ! $local_exists ) {
-				WP_CLI::line( WP_CLI::colorize( '%G✓ Local file successfully deleted (expected in full offload mode)%n' ) );
-			} else {
-				WP_CLI::warning( '✗ Local file still exists (should be deleted in full offload mode)' );
-			}
-		} else {
-			// In sync-only mode, local files should remain
-			if ( $local_exists ) {
-				WP_CLI::line( WP_CLI::colorize( '%G✓ Local file kept (expected in sync-only mode)%n' ) );
-			} else {
-				WP_CLI::warning( '✗ Local file deleted (should be kept in sync-only mode)' );
-			}
+		if ( $this->plugin_enabled && ! $local_exists ) {
+			// In full offload mode, local files should be deleted.
+			WP_CLI::line( WP_CLI::colorize( '%G✓ Local file successfully deleted (expected in full offload mode)%n' ) );
+		} elseif ( $this->plugin_enabled && $local_exists ) {
+			WP_CLI::warning( '✗ Local file still exists (should be deleted in full offload mode)' );
+		} elseif ( ! $this->plugin_enabled && $local_exists ) {
+			// In sync-only mode, local files should remain.
+			WP_CLI::line( WP_CLI::colorize( '%G✓ Local file kept (expected in sync-only mode)%n' ) );
+		} elseif ( ! $this->plugin_enabled && ! $local_exists ) {
+			WP_CLI::warning( '✗ Local file deleted (should be kept in sync-only mode)' );
 		}
 		WP_CLI::line( '' );
 
@@ -545,10 +541,10 @@ class Commands {
 		if ( ! $keep_file ) {
 			WP_CLI::line( 'Deleting attachment from WordPress...' );
 
-			// Check S3 before deletion
+			// Check S3 before deletion.
 			$s3_exists_before = $this->s3_handler->object_exists( $s3_key );
 
-			// Delete attachment
+			// Delete attachment.
 			$deleted = wp_delete_attachment( $attachment_id, true );
 
 			if ( ! $deleted ) {
@@ -558,10 +554,10 @@ class Commands {
 
 			WP_CLI::line( WP_CLI::colorize( '%G✓ Attachment deleted from WordPress%n' ) );
 
-			// Wait briefly for deletion to propagate
+			// Wait briefly for deletion to propagate.
 			sleep( 1 );
 
-			// Check if S3 files were deleted
+			// Check if S3 files were deleted.
 			if ( $this->plugin_enabled ) {
 				$s3_exists_after = $this->s3_handler->object_exists( $s3_key );
 
@@ -569,14 +565,14 @@ class Commands {
 					WP_CLI::line( WP_CLI::colorize( '%G✓ S3 files deleted (expected in full offload mode)%n' ) );
 				} elseif ( $s3_exists_after ) {
 					WP_CLI::warning( '✗ S3 files still exist (should be deleted in full offload mode)' );
-					// Clean up manually
+					// Clean up manually.
 					foreach ( $s3_files_to_check as $type => $key ) {
 						$this->s3_handler->delete_object( $key );
 					}
 				}
 			} else {
 				WP_CLI::line( WP_CLI::colorize( '%Y✓ S3 files kept (expected in sync-only mode)%n' ) );
-				// Clean up S3 files manually in sync-only mode
+				// Clean up S3 files manually in sync-only mode.
 				foreach ( $s3_files_to_check as $type => $key ) {
 					$this->s3_handler->delete_object( $key );
 				}
@@ -602,7 +598,7 @@ class Commands {
 	 * @return bool True on success, false on failure.
 	 */
 	private function create_test_image( $file_path ) {
-		// Create a 800x600 test image
+		// Create a 800x600 test image.
 		$width  = 800;
 		$height = 600;
 		$image  = imagecreatetruecolor( $width, $height );
@@ -611,7 +607,7 @@ class Commands {
 			return false;
 		}
 
-		// Create a gradient background
+		// Create a gradient background.
 		for ( $y = 0; $y < $height; $y++ ) {
 			$r     = (int) ( 255 * ( $y / $height ) );
 			$g     = (int) ( 100 + 155 * ( $y / $height ) );
@@ -620,7 +616,7 @@ class Commands {
 			imagefilledrectangle( $image, 0, $y, $width, $y + 1, $color );
 		}
 
-		// Add some text
+		// Add some text.
 		$white = imagecolorallocate( $image, 255, 255, 255 );
 		$black = imagecolorallocate( $image, 0, 0, 0 );
 
@@ -631,16 +627,16 @@ class Commands {
 		$x           = (int) ( ( $width - $text_width ) / 2 );
 		$y           = (int) ( ( $height - $text_height ) / 2 );
 
-		// Shadow
+		// Shadow.
 		imagestring( $image, $font_size, $x + 2, $y + 2, $text, $black );
-		// Text
+		// Text.
 		imagestring( $image, $font_size, $x, $y, $text, $white );
 
-		// Add timestamp
+		// Add timestamp.
 		$timestamp = gmdate( 'Y-m-d H:i:s' ) . ' UTC';
 		imagestring( $image, 3, 10, $height - 20, $timestamp, $white );
 
-		// Save as JPEG
+		// Save as JPEG.
 		$success = imagejpeg( $image, $file_path, 90 );
 		imagedestroy( $image );
 
@@ -656,8 +652,8 @@ class Commands {
 		}
 
 		foreach ( $this->init_errors as $msg ) {
-			$is_critical = false !== strpos( strtolower( $msg ), 'hetzner_storage_' ) ||
-							false !== strpos( strtolower( $msg ), 'failed to initialize s3 client' );
+			$is_critical = strpos( strtolower( $msg ), 'hetzner_storage_' ) !== false ||
+							strpos( strtolower( $msg ), 'failed to initialize s3 client' ) !== false;
 
 			if ( $is_critical && ! $this->s3_handler->is_initialized() ) {
 				WP_CLI::error( $msg );
@@ -872,7 +868,7 @@ class Commands {
 		$metadata = wp_get_attachment_metadata( $attachment_id );
 		if ( isset( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
 			$primary_dir = dirname( $primary_wp_meta_path );
-			if ( '.' === $primary_dir ) {
+			if ( $primary_dir === '.' ) {
 				$primary_dir = '';
 			}
 
@@ -912,10 +908,10 @@ class Commands {
 
 		// Check if file already exists on S3.
 		if ( ! $force_upload ) {
-			if ( null !== $existing_s3_keys && isset( $existing_s3_keys[ $s3_key ] ) ) {
+			if ( $existing_s3_keys !== null && isset( $existing_s3_keys[ $s3_key ] ) ) {
 				++$counters['files_skipped_exists'];
 				return;
-			} elseif ( null === $existing_s3_keys && $this->s3_handler->object_exists( $s3_key ) ) {
+			} elseif ( $existing_s3_keys === null && $this->s3_handler->object_exists( $s3_key ) ) {
 				++$counters['files_skipped_exists'];
 				return;
 			}
@@ -950,7 +946,7 @@ class Commands {
 		$attachment_ids    = $this->get_all_attachment_ids();
 		$total_attachments = count( $attachment_ids );
 
-		if ( 0 === $total_attachments ) {
+		if ( $total_attachments === 0 ) {
 			WP_CLI::line( 'No attachments found in WordPress media library.' );
 			return;
 		}
@@ -1023,7 +1019,7 @@ class Commands {
 					++$counters['s3_reuploaded'];
 				} elseif ( $this->s3_handler->upload_file( $local_path, $s3_key ) ) {
 					++$counters['s3_reuploaded'];
-					if ( $cleanup_local && unlink( $local_path ) ) {
+					if ( $cleanup_local && wp_delete_file( $local_path ) ) {
 						++$counters['local_cleaned'];
 					}
 				} else {
@@ -1034,7 +1030,7 @@ class Commands {
 			if ( $cleanup_local && ! $reupload_missing ) {
 				if ( $dry_run ) {
 					++$counters['local_cleaned'];
-				} elseif ( unlink( $local_path ) ) {
+				} elseif ( wp_delete_file( $local_path ) ) {
 					++$counters['local_cleaned'];
 				} else {
 					++$counters['local_cleanup_failed'];
@@ -1118,15 +1114,17 @@ class Commands {
 	 * @param array $orphans Orphan S3 keys.
 	 */
 	private function list_s3_orphans( $orphans ) {
-		$max_to_list = 20;
+		$max_to_list  = 20;
+		$orphan_count = count( $orphans );
 		WP_CLI::line( sprintf( 'To delete them, run again with --delete-s3-orphans. Listing first %d (at most) S3 Orphan Keys:', $max_to_list ) );
 
-		for ( $i = 0; $i < min( count( $orphans ), $max_to_list ); $i++ ) {
+		$limit = min( $orphan_count, $max_to_list );
+		for ( $i = 0; $i < $limit; $i++ ) {
 			WP_CLI::line( '- ' . $orphans[ $i ] );
 		}
 
-		if ( count( $orphans ) > $max_to_list ) {
-			WP_CLI::line( sprintf( '...and %d more.', count( $orphans ) - $max_to_list ) );
+		if ( $orphan_count > $max_to_list ) {
+			WP_CLI::line( sprintf( '...and %d more.', $orphan_count - $max_to_list ) );
 		}
 	}
 
@@ -1220,7 +1218,7 @@ class Commands {
 		$metadata = wp_get_attachment_metadata( $attachment_id );
 		if ( isset( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
 			$primary_dir = dirname( $primary_wp_meta_path );
-			if ( '.' === $primary_dir ) {
+			if ( $primary_dir === '.' ) {
 				$primary_dir = '';
 			}
 

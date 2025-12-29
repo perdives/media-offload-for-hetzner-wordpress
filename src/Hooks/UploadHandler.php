@@ -97,7 +97,7 @@ class UploadHandler {
 		// Upload thumbnails.
 		if ( isset( $data['sizes'] ) && is_array( $data['sizes'] ) ) {
 			$primary_file_dir = dirname( $primary_wp_meta_path );
-			if ( '.' === $primary_file_dir ) {
+			if ( $primary_file_dir === '.' ) {
 				$primary_file_dir = '';
 			}
 
@@ -121,7 +121,7 @@ class UploadHandler {
 		if ( $this->delete_local_files ) {
 			foreach ( array_unique( $uploaded_files ) as $local_file ) {
 				if ( file_exists( $local_file ) ) {
-					unlink( $local_file );
+					wp_delete_file( $local_file );
 				}
 			}
 		}
@@ -152,7 +152,7 @@ class UploadHandler {
 		$metadata = wp_get_attachment_metadata( $attachment_id );
 		if ( isset( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
 			$base_dir = dirname( $wp_meta_path );
-			if ( '.' === $base_dir || DIRECTORY_SEPARATOR === $base_dir ) {
+			if ( $base_dir === '.' || $base_dir === DIRECTORY_SEPARATOR ) {
 				$base_dir = '';
 			} else {
 				$base_dir .= '/';

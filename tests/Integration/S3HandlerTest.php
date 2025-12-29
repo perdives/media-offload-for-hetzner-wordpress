@@ -108,20 +108,6 @@ class S3HandlerTest extends PolyfillTestCase {
 	}
 
 	/**
-	 * Test: S3Handler initialization without credentials
-	 *
-	 * Verifies that S3Handler fails gracefully when credentials are missing.
-	 */
-	public function test_initialization_without_credentials() {
-		// This test requires running separately without credentials set
-		// Skipping in normal test runs
-		$this->markTestSkipped(
-			'This test requires running without credentials. ' .
-			'Run manually by unsetting HETZNER_* env vars.'
-		);
-	}
-
-	/**
 	 * Test: Upload file to S3
 	 *
 	 * Verifies that files can be successfully uploaded to Hetzner Object Storage.

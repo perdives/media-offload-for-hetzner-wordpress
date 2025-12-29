@@ -163,7 +163,7 @@ class S3Handler {
 				array(
 					'Bucket' => $this->bucket,
 					'Key'    => $s3_key,
-					'Body'   => fopen( $local_path, 'rb' ),
+					'Body'   => fopen( $local_path, 'rb' ), // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Required by AWS SDK for efficient streaming.
 					'ACL'    => 'public-read',
 				)
 			);

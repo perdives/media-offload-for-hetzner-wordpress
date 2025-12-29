@@ -3,6 +3,9 @@
 
     <description>WordPress Coding Standards for Hetzner Offload Plugin</description>
 
+    <!-- Use Perdives Coding Standards as base -->
+    <rule ref="Perdives"/>
+
     <!-- What to scan -->
     <file>.</file>
 
@@ -13,17 +16,11 @@
     <exclude-pattern>*.js</exclude-pattern>
     <exclude-pattern>*.css</exclude-pattern>
 
-    <!-- Show progress and sniff codes -->
-    <arg value="ps"/>
-
     <!-- Strip the filepaths down to the relevant bit -->
     <arg name="basepath" value="./"/>
 
     <!-- Check up to 20 files simultaneously -->
     <arg name="parallel" value="20"/>
-
-    <!-- Show colors in output -->
-    <arg name="colors"/>
 
     <!-- Enables caching for better performance -->
     <arg name="cache" value=".phpcs.cache"/>
@@ -31,15 +28,7 @@
     <!-- Only check PHP files -->
     <arg name="extensions" value="php"/>
 
-    <!-- Include the WordPress Coding Standards -->
-    <rule ref="WordPress">
-        <!-- Allow short array syntax -->
-        <exclude name="Generic.Arrays.DisallowShortArraySyntax"/>
-
-        <!-- We use PSR-4 autoloading so file names don't need class prefixes -->
-        <exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
-        <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
-    </rule>
+    <!-- Project-specific overrides -->
 
     <!-- Enforce WordPress naming conventions -->
     <rule ref="WordPress.NamingConventions.PrefixAllGlobals">
@@ -53,22 +42,19 @@
         </properties>
     </rule>
 
-    <!-- Verify minimum PHP version -->
-    <config name="testVersion" value="7.4-"/>
-    <rule ref="PHPCompatibilityWP"/>
+    <!-- Override minimum PHP version (Perdives default is 7.4) -->
+    <config name="testVersion" value="8.1-"/>
 
-    <!-- Allow for theme specific exceptions to WordPress VIP rules -->
-    <rule ref="WordPress-Extra">
-        <!-- Allow direct database queries for plugin functionality -->
+    <!-- Override minimum WordPress version (Perdives default is 5.8) -->
+    <config name="minimum_supported_wp_version" value="5.0"/>
+
+    <!-- Allow direct database queries for plugin functionality -->
+    <rule ref="WordPress.DB.DirectDatabaseQuery">
         <exclude name="WordPress.DB.DirectDatabaseQuery"/>
     </rule>
 
-    <!-- Check for cross-version support -->
-    <config name="minimum_supported_wp_version" value="5.0"/>
-
-    <!-- Verify that everything is documented -->
-    <rule ref="WordPress-Docs">
-        <!-- Allow missing package tags temporarily during refactoring -->
+    <!-- Allow missing package tags temporarily during refactoring -->
+    <rule ref="Squiz.Commenting.FileComment.MissingPackageTag">
         <exclude name="Squiz.Commenting.FileComment.MissingPackageTag"/>
     </rule>
 

@@ -72,7 +72,7 @@ class Plugin {
 	 * @return Plugin
 	 */
 	public static function get_instance() {
-		if ( null === self::$instance ) {
+		if ( self::$instance === null ) {
 			self::$instance = new self();
 		}
 
@@ -104,9 +104,9 @@ class Plugin {
 		// Add informational messages about plugin state.
 		if ( $this->s3_handler->is_initialized() ) {
 			if ( ! defined( 'PERDIVES_MO_OFFLOAD_ENABLED' ) ) {
-				$this->init_errors[] = 'Hetzner Offload: S3 sync is active for new uploads. Local files will be kept. URL rewriting and other media hooks are disabled by default. Define PERDIVES_MO_OFFLOAD_ENABLED as true in wp-config.php for full offloading features (URL rewriting, local file deletion).';
+				$this->init_errors[] = 'Hetzner Offload: Plugin is disabled. Media offload is inactive. Define PERDIVES_MO_OFFLOAD_ENABLED as true in wp-config.php to enable automatic offloading to Hetzner S3 (URL rewriting, local file deletion, automatic uploads).';
 			} elseif ( PERDIVES_MO_OFFLOAD_ENABLED !== true ) {
-				$this->init_errors[] = 'Hetzner Offload: S3 sync is active for new uploads. Local files will be kept. URL rewriting and other media hooks are disabled because PERDIVES_MO_OFFLOAD_ENABLED is not set to true. Set to true for full offloading features.';
+				$this->init_errors[] = 'Hetzner Offload: Plugin is disabled. Media offload is inactive because PERDIVES_MO_OFFLOAD_ENABLED is not set to true. Set to true to enable automatic offloading to Hetzner S3.';
 			}
 		}
 
@@ -123,11 +123,11 @@ class Plugin {
 	 * Register WordPress hooks
 	 */
 	private function register_hooks() {
-		// Register upload handler hooks (always active if S3 is initialized).
-		$this->upload_handler->register_hooks();
-
-		// Register URL rewriter hooks (only if fully enabled).
-		$this->url_rewriter->register_hooks();
+		// Register upload handler and URL rewriter hooks (only if fully enabled).
+		if ( $this->plugin_enabled ) {
+			$this->upload_handler->register_hooks();
+			$this->url_rewriter->register_hooks();
+		}
 
 		// Register WP-CLI commands.
 		$this->cli_commands->register();
