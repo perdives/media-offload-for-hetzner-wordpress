@@ -564,6 +564,76 @@ class S3HandlerTest extends PolyfillTestCase {
 	}
 
 	/**
+	 * Test: normalize_directory_path with various inputs
+	 *
+	 * Verifies directory path normalization logic.
+	 */
+	public function test_normalize_directory_path() {
+		// Root directories should become empty string
+		$this->assertEquals( '', $this->handler->normalize_directory_path( '.' ) );
+		$this->assertEquals( '', $this->handler->normalize_directory_path( '/' ) );
+
+		// Paths should get trailing slash
+		$this->assertEquals( '2025/12/', $this->handler->normalize_directory_path( '2025/12' ) );
+		$this->assertEquals( '2025/12/', $this->handler->normalize_directory_path( '2025/12/' ) );
+
+		// Multiple trailing slashes should be normalized to one
+		$this->assertEquals( '2025/12/', $this->handler->normalize_directory_path( '2025/12///' ) );
+
+		// Multisite paths
+		$this->assertEquals( 'sites/3/2025/12/', $this->handler->normalize_directory_path( 'sites/3/2025/12' ) );
+	}
+
+	/**
+	 * Test: path_to_s3_key with various path formats
+	 *
+	 * Verifies S3 key generation from WordPress file paths.
+	 */
+	public function test_path_to_s3_key() {
+		// Relative paths should get uploads/ prefix
+		$this->assertEquals(
+			'uploads/2025/12/image.jpg',
+			$this->handler->path_to_s3_key( '2025/12/image.jpg' )
+		);
+
+		// Leading slash should be handled
+		$this->assertEquals(
+			'uploads/2025/12/image.jpg',
+			$this->handler->path_to_s3_key( '/2025/12/image.jpg' )
+		);
+
+		// Full paths containing /uploads/ should extract correctly
+		$this->assertEquals(
+			'uploads/2025/12/image.jpg',
+			$this->handler->path_to_s3_key( '/var/www/html/wp-content/uploads/2025/12/image.jpg' )
+		);
+
+		// Multisite paths should preserve sites/{id}/
+		$this->assertEquals(
+			'uploads/sites/2/2025/12/image.jpg',
+			$this->handler->path_to_s3_key( '/var/www/html/wp-content/uploads/sites/2/2025/12/image.jpg' )
+		);
+
+		// Relative multisite paths
+		$this->assertEquals(
+			'uploads/sites/3/2025/12/test.png',
+			$this->handler->path_to_s3_key( 'sites/3/2025/12/test.png' )
+		);
+
+		// Scaled images
+		$this->assertEquals(
+			'uploads/sites/3/2025/12/image-scaled.jpg',
+			$this->handler->path_to_s3_key( '/var/www/uploads/sites/3/2025/12/image-scaled.jpg' )
+		);
+
+		// Thumbnails
+		$this->assertEquals(
+			'uploads/sites/2/2025/12/image-150x150.jpg',
+			$this->handler->path_to_s3_key( '/var/www/uploads/sites/2/2025/12/image-150x150.jpg' )
+		);
+	}
+
+	/**
 	 * Helper: Skip test if S3Handler is not initialized
 	 *
 	 * @return void
