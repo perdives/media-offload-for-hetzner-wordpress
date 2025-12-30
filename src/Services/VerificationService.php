@@ -271,14 +271,13 @@ class VerificationService {
 
 		// Process primary file.
 		$local_primary_path = $base_upload_path . '/' . $primary_wp_meta_path;
-		$s3_primary_key     = 'uploads/' . preg_replace( '#/{2,}#', '/', $primary_wp_meta_path );
+		$s3_primary_key     = $this->s3_handler->path_to_s3_key( $local_primary_path );
 		$this->process_file_upload( $local_primary_path, $s3_primary_key, $attachment_id, $dry_run, $force_upload, $existing_s3_keys, $counters );
 
 		// Process true original if different.
 		$true_original_path = wp_get_original_image_path( $attachment_id );
 		if ( $true_original_path && $true_original_path !== $local_primary_path ) {
-			$relative_original = str_replace( $base_upload_path . '/', '', $true_original_path );
-			$s3_original_key   = 'uploads/' . preg_replace( '#/{2,}#', '/', $relative_original );
+			$s3_original_key = $this->s3_handler->path_to_s3_key( $true_original_path );
 			$this->process_file_upload( $true_original_path, $s3_original_key, $attachment_id, $dry_run, $force_upload, $existing_s3_keys, $counters );
 		}
 
@@ -297,8 +296,7 @@ class VerificationService {
 
 				$thumbnail_filename = $size_info['file'];
 				$local_thumb_path   = $base_upload_path . '/' . ( $primary_dir ? $primary_dir . '/' : '' ) . $thumbnail_filename;
-				$s3_thumb_key       = 'uploads/' . ( $primary_dir ? $primary_dir . '/' : '' ) . $thumbnail_filename;
-				$s3_thumb_key       = preg_replace( '#/{2,}#', '/', $s3_thumb_key );
+				$s3_thumb_key       = $this->s3_handler->path_to_s3_key( $local_thumb_path );
 
 				$this->process_file_upload( $local_thumb_path, $s3_thumb_key, $attachment_id, $dry_run, $force_upload, $existing_s3_keys, $counters );
 			}
@@ -572,7 +570,7 @@ class VerificationService {
 
 		// Primary file.
 		$local_primary_path = $base_upload_path . '/' . $primary_wp_meta_path;
-		$s3_primary_key     = 'uploads/' . preg_replace( '#/{2,}#', '/', $primary_wp_meta_path );
+		$s3_primary_key     = $this->s3_handler->path_to_s3_key( $local_primary_path );
 		$files[]            = array(
 			'local_path' => $local_primary_path,
 			's3_key'     => $s3_primary_key,
@@ -582,9 +580,8 @@ class VerificationService {
 		// True original if different.
 		$true_original_path = wp_get_original_image_path( $attachment_id );
 		if ( $true_original_path && $true_original_path !== $local_primary_path ) {
-			$relative_original = str_replace( $base_upload_path . '/', '', $true_original_path );
-			$s3_original_key   = 'uploads/' . preg_replace( '#/{2,}#', '/', $relative_original );
-			$files[]           = array(
+			$s3_original_key = $this->s3_handler->path_to_s3_key( $true_original_path );
+			$files[]         = array(
 				'local_path' => $true_original_path,
 				's3_key'     => $s3_original_key,
 				'type'       => 'true_original',
@@ -606,8 +603,7 @@ class VerificationService {
 
 				$thumbnail_filename = $size_info['file'];
 				$local_thumb_path   = $base_upload_path . '/' . ( $primary_dir ? $primary_dir . '/' : '' ) . $thumbnail_filename;
-				$s3_thumb_key       = 'uploads/' . ( $primary_dir ? $primary_dir . '/' : '' ) . $thumbnail_filename;
-				$s3_thumb_key       = preg_replace( '#/{2,}#', '/', $s3_thumb_key );
+				$s3_thumb_key       = $this->s3_handler->path_to_s3_key( $local_thumb_path );
 				$files[]            = array(
 					'local_path' => $local_thumb_path,
 					's3_key'     => $s3_thumb_key,

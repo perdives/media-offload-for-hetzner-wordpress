@@ -216,6 +216,23 @@ class S3Handler {
 	}
 
 	/**
+	 * Convert a WordPress file path to an S3 key
+	 *
+	 * Handles both full paths and relative paths, and supports multisite.
+	 *
+	 * @param string $path WordPress file path (full or relative).
+	 * @return string S3 object key.
+	 */
+	public function path_to_s3_key( $path ) {
+		// Extract path relative to uploads directory if it's a full path.
+		if ( preg_match( '#/uploads/(.+)$#', $path, $matches ) ) {
+			$path = $matches[1];
+		}
+
+		return 'uploads/' . ltrim( $path, '/' );
+	}
+
+	/**
 	 * Get S3 URL for a file
 	 *
 	 * @param string $key File key (without 'uploads/' prefix).

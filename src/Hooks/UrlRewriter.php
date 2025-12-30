@@ -64,7 +64,15 @@ class UrlRewriter {
 
 		$file = get_post_meta( $attachment_id, '_wp_attached_file', true );
 		if ( $file ) {
-			return $this->s3_handler->get_url( $file );
+			// Construct full local path to properly handle multisite paths.
+			$wp_upload_dir = wp_upload_dir();
+			$local_path    = $wp_upload_dir['basedir'] . '/' . $file;
+
+			// Get S3 key and strip 'uploads/' prefix for get_url().
+			$s3_key              = $this->s3_handler->path_to_s3_key( $local_path );
+			$key_without_uploads = preg_replace( '#^uploads/#', '', $s3_key );
+
+			return $this->s3_handler->get_url( $key_without_uploads );
 		}
 
 		return $url;

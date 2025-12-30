@@ -471,7 +471,8 @@ class Commands {
 
 		// Main file.
 		if ( $attached_file ) {
-			$s3_files_to_check['main'] = 'uploads/' . preg_replace( '#/{2,}#', '/', $attached_file );
+			$local_main_path                = $wp_upload_dir['basedir'] . '/' . $attached_file;
+			$s3_files_to_check['main'] = $this->s3_handler->path_to_s3_key( $local_main_path );
 		}
 
 		// Thumbnails.
@@ -483,8 +484,9 @@ class Commands {
 
 			foreach ( $metadata['sizes'] as $size_name => $size_info ) {
 				if ( ! empty( $size_info['file'] ) ) {
-					$s3_key                          = 'uploads/' . ( $base_dir ? $base_dir . '/' : '' ) . $size_info['file'];
-					$s3_files_to_check[ $size_name ] = preg_replace( '#/{2,}#', '/', $s3_key );
+					$thumbnail_path                  = ( $base_dir ? $base_dir . '/' : '' ) . $size_info['file'];
+					$local_thumbnail_path            = $wp_upload_dir['basedir'] . '/' . $thumbnail_path;
+					$s3_files_to_check[ $size_name ] = $this->s3_handler->path_to_s3_key( $local_thumbnail_path );
 				}
 			}
 		}

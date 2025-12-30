@@ -76,7 +76,7 @@ class UploadHandler {
 		}
 
 		$local_primary_path = $base_upload_path . '/' . $primary_wp_meta_path;
-		$s3_primary_key     = 'uploads/' . preg_replace( '#/{2,}#', '/', $primary_wp_meta_path );
+		$s3_primary_key     = $this->s3_handler->path_to_s3_key( $local_primary_path );
 
 		// Upload primary file.
 		if ( file_exists( $local_primary_path ) && $this->s3_handler->upload_file( $local_primary_path, $s3_primary_key ) ) {
@@ -86,8 +86,7 @@ class UploadHandler {
 		// Upload true original if different (e.g., -scaled images).
 		$true_original_path = wp_get_original_image_path( $attachment_id );
 		if ( $true_original_path && $true_original_path !== $local_primary_path ) {
-			$relative_original_path = str_replace( $base_upload_path . '/', '', $true_original_path );
-			$s3_original_key        = 'uploads/' . preg_replace( '#/{2,}#', '/', $relative_original_path );
+			$s3_original_key = $this->s3_handler->path_to_s3_key( $true_original_path );
 
 			if ( file_exists( $true_original_path ) && $this->s3_handler->upload_file( $true_original_path, $s3_original_key ) ) {
 				$uploaded_files[] = $true_original_path;
@@ -108,8 +107,7 @@ class UploadHandler {
 
 				$thumbnail_filename = $size_info['file'];
 				$local_thumb_path   = $base_upload_path . '/' . ( $primary_file_dir ? $primary_file_dir . '/' : '' ) . $thumbnail_filename;
-				$s3_thumb_key       = 'uploads/' . ( $primary_file_dir ? $primary_file_dir . '/' : '' ) . $thumbnail_filename;
-				$s3_thumb_key       = preg_replace( '#/{2,}#', '/', $s3_thumb_key );
+				$s3_thumb_key       = $this->s3_handler->path_to_s3_key( $local_thumb_path );
 
 				if ( file_exists( $local_thumb_path ) && $this->s3_handler->upload_file( $local_thumb_path, $s3_thumb_key ) ) {
 					$uploaded_files[] = $local_thumb_path;
@@ -144,8 +142,11 @@ class UploadHandler {
 			return;
 		}
 
+		$wp_upload_dir = wp_upload_dir();
+
 		// Delete main file.
-		$s3_main_key = 'uploads/' . preg_replace( '#/{2,}#', '/', $wp_meta_path );
+		$local_main_path = $wp_upload_dir['basedir'] . '/' . $wp_meta_path;
+		$s3_main_key     = $this->s3_handler->path_to_s3_key( $local_main_path );
 		$this->s3_handler->delete_object( $s3_main_key );
 
 		// Delete thumbnails.
@@ -163,19 +164,19 @@ class UploadHandler {
 					continue;
 				}
 
-				$thumbnail_path = $base_dir . $size_info['file'];
-				$s3_thumb_key   = 'uploads/' . preg_replace( '#/{2,}#', '/', $thumbnail_path );
+				$thumbnail_path      = $base_dir . $size_info['file'];
+				$local_thumbnail_path = $wp_upload_dir['basedir'] . '/' . $thumbnail_path;
+				$s3_thumb_key        = $this->s3_handler->path_to_s3_key( $local_thumbnail_path );
 				$this->s3_handler->delete_object( $s3_thumb_key );
 			}
 		}
 
 		// Delete true original if exists.
-		$wp_upload_dir  = wp_upload_dir();
 		$original_image = wp_get_original_image_path( $attachment_id );
 		if ( $original_image ) {
 			$relative_original = str_replace( $wp_upload_dir['basedir'] . '/', '', $original_image );
 			if ( $relative_original !== $wp_meta_path ) {
-				$s3_original_key = 'uploads/' . preg_replace( '#/{2,}#', '/', $relative_original );
+				$s3_original_key = $this->s3_handler->path_to_s3_key( $original_image );
 				$this->s3_handler->delete_object( $s3_original_key );
 			}
 		}
