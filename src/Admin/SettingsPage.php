@@ -64,9 +64,17 @@ class SettingsPage {
 		add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_styles' ) );
 
+		// Add to network admin menu if multisite.
+		if ( is_multisite() ) {
+			add_action( 'network_admin_menu', array( $this, 'add_network_settings_page' ) );
+		}
+
 		// Add settings link to plugin actions.
 		$plugin_basename = plugin_basename( dirname( __DIR__, 2 ) . '/media-offload-for-hetzner.php' );
 		add_filter( 'plugin_action_links_' . $plugin_basename, array( $this, 'add_plugin_action_links' ) );
+		if ( is_multisite() ) {
+			add_filter( 'network_admin_plugin_action_links_' . $plugin_basename, array( $this, 'add_plugin_action_links' ) );
+		}
 	}
 
 	/**
@@ -75,8 +83,8 @@ class SettingsPage {
 	 * @param string $hook Current admin page hook.
 	 */
 	public function enqueue_styles( $hook ) {
-		// Only load on our settings page.
-		if ( $hook !== 'settings_page_hetzner-offload' ) {
+		// Only load on our settings page (regular admin or network admin).
+		if ( $hook !== 'settings_page_hetzner-offload' && $hook !== 'settings_page_hetzner-offload-network' ) {
 			return;
 		}
 
@@ -95,9 +103,14 @@ class SettingsPage {
 	 * @return array Modified plugin action links.
 	 */
 	public function add_plugin_action_links( $links ) {
+		// Use network admin URL if in network admin context, otherwise regular admin.
+		$settings_url = is_network_admin()
+			? network_admin_url( 'settings.php?page=hetzner-offload' )
+			: admin_url( 'options-general.php?page=hetzner-offload' );
+
 		$settings_link = sprintf(
 			'<a href="%s">%s</a>',
-			admin_url( 'options-general.php?page=hetzner-offload' ),
+			$settings_url,
 			__( 'Settings', 'media-offload-for-hetzner' )
 		);
 
@@ -120,17 +133,37 @@ class SettingsPage {
 	}
 
 	/**
+	 * Add settings page to network admin menu
+	 */
+	public function add_network_settings_page() {
+		add_submenu_page(
+			'settings.php',
+			'Hetzner Offload',
+			'Hetzner Offload',
+			'manage_network_options',
+			'hetzner-offload',
+			array( $this, 'render_settings_page' )
+		);
+	}
+
+	/**
 	 * Render settings page
 	 */
 	public function render_settings_page() {
+		// Check if we should show the storage list.
+		$show_storage_list = isset( $_GET['view'] ) && $_GET['view'] === 'storage-list'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		?>
 		<div class="wrap">
 			<h1 class="perdives-mo-title">Hetzner Offload - Status & Verification</h1>
 
-			<?php $this->render_system_status(); ?>
-			<?php $this->render_cli_commands(); ?>
-			<?php $this->render_connection_info(); ?>
-			<?php $this->render_verification_results(); ?>
+			<?php if ( $show_storage_list ) : ?>
+				<?php $this->render_storage_list(); ?>
+			<?php else : ?>
+				<?php $this->render_system_status(); ?>
+				<?php $this->render_cli_commands(); ?>
+				<?php $this->render_connection_info(); ?>
+				<?php $this->render_verification_results(); ?>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
@@ -203,6 +236,21 @@ class SettingsPage {
 				<h3>WordPress Configuration</h3>
 				<table class="perdives-mo-table" role="presentation">
 				<tbody>
+					<?php if ( is_multisite() ) : ?>
+						<tr>
+							<th scope="row">Network</th>
+							<td>
+								<?php echo esc_html( get_network()->domain . get_network()->path ); ?>
+								<?php if ( is_network_admin() ) : ?>
+									<p class="description">Viewing network-wide settings</p>
+								<?php endif; ?>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row">Site ID</th>
+							<td><code><?php echo esc_html( get_current_blog_id() ); ?></code></td>
+						</tr>
+					<?php endif; ?>
 					<tr>
 						<th scope="row">Site Name</th>
 						<td><?php echo esc_html( get_bloginfo( 'name' ) ); ?></td>
@@ -213,7 +261,12 @@ class SettingsPage {
 					</tr>
 					<tr>
 						<th scope="row">Uploads Path</th>
-						<td><code><?php echo esc_html( $upload_dir['basedir'] ); ?></code></td>
+						<td>
+							<code><?php echo esc_html( $upload_dir['basedir'] ); ?></code>
+							<?php if ( is_multisite() && get_current_blog_id() > 1 ) : ?>
+								<p class="description">Multisite subsite - includes sites/<?php echo esc_html( get_current_blog_id() ); ?>/ prefix</p>
+							<?php endif; ?>
+						</td>
 					</tr>
 					<tr>
 						<th scope="row">Uploads URL</th>
@@ -445,6 +498,92 @@ class SettingsPage {
 					<p class="description">Too many orphan files to display (<?php echo count( $orphans ); ?> total). Use WP-CLI to view the full list.</p>
 				<?php endif; ?>
 			<?php endif; ?>
+
+			<h3>Hetzner Storage List</h3>
+			<p>
+				<a href="<?php echo esc_url( add_query_arg( 'view', 'storage-list' ) ); ?>" class="button">
+					View All Storage Objects
+				</a>
+			</p>
+			<p class="description">View all files stored in your Hetzner S3 bucket</p>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Render storage list section
+	 */
+	private function render_storage_list() {
+		// Get all S3 objects if initialized.
+		$all_objects = null;
+		if ( $this->s3_handler->is_initialized() ) {
+			$all_objects = $this->s3_handler->list_objects( 'uploads/' );
+		}
+
+		$total_objects = is_array( $all_objects ) ? count( $all_objects ) : 0;
+		?>
+		<div class="perdives-mo-section">
+
+			<h2>Hetzner Storage Objects</h2>
+			<div class="perdives-mo-section__inner">
+				<?php if ( ! $this->s3_handler->is_initialized() ) : ?>
+					<div class="notice notice-error inline">
+						<p>S3 client not initialized. Cannot retrieve storage objects.</p>
+					</div>
+				<?php elseif ( $all_objects === null ) : ?>
+					<div class="notice notice-error inline">
+						<p>Failed to retrieve objects from S3.</p>
+					</div>
+				<?php else : ?>
+					<p>
+						<strong><?php echo esc_html( number_format_i18n( $total_objects ) ); ?></strong> total objects
+					</p>
+
+					<?php if ( ! empty( $all_objects ) ) : ?>
+						<table class="wp-list-table widefat fixed striped">
+							<thead>
+								<tr>
+									<th style="width: 60%;">S3 Key</th>
+									<th>Size</th>
+									<th>Last Modified</th>
+									<th>URL</th>
+								</tr>
+							</thead>
+							<tbody>
+								<?php foreach ( $all_objects as $object ) : ?>
+									<?php
+									$key                = $object['Key'];
+									$size               = isset( $object['Size'] ) ? $object['Size'] : 0;
+									$last_modified      = isset( $object['LastModified'] ) ? $object['LastModified'] : null;
+									$key_without_prefix = preg_replace( '#^uploads/#', '', $key );
+									$url                = $this->s3_handler->get_url( $key_without_prefix );
+									?>
+									<tr>
+										<td><code style="font-size: 11px;"><?php echo esc_html( $key ); ?></code></td>
+										<td><?php echo esc_html( size_format( $size, 2 ) ); ?></td>
+										<td>
+											<?php
+											if ( $last_modified ) {
+												echo esc_html( $last_modified->format( 'Y-m-d H:i:s' ) );
+											} else {
+												echo '—';
+											}
+											?>
+										</td>
+										<td>
+											<a href="<?php echo esc_url( $url ); ?>" target="_blank" rel="noopener noreferrer">
+												View
+											</a>
+										</td>
+									</tr>
+								<?php endforeach; ?>
+							</tbody>
+						</table>
+					<?php else : ?>
+						<p>No objects found in the S3 bucket.</p>
+					<?php endif; ?>
+				<?php endif; ?>
 			</div>
 		</div>
 		<?php
