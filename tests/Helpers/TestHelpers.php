@@ -57,8 +57,6 @@ class TestHelpers {
 			imagejpeg( $image, $filename, 90 );
 		}
 
-		imagedestroy( $image );
-
 		return file_exists( $filename ) ? $filename : false;
 	}
 

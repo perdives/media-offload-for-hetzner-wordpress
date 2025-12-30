@@ -97,7 +97,6 @@ class VerificationService {
 
 		// Save as JPEG.
 		$success = imagejpeg( $image, $file_path, 90 );
-		imagedestroy( $image );
 
 		return $success;
 	}

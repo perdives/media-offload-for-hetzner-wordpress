@@ -158,18 +158,37 @@ class S3Handler {
 			return false;
 		}
 
+		$file_handle = null;
 		try {
+			$file_handle = fopen( $local_path, 'rb' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Required by AWS SDK for efficient streaming.
+			if ( ! $file_handle ) {
+				error_log( sprintf( 'Hetzner Offload: Failed to open file for upload: %s', $local_path ) );
+				return false;
+			}
+
 			$this->s3_client->putObject(
 				array(
 					'Bucket' => $this->bucket,
 					'Key'    => $s3_key,
-					'Body'   => fopen( $local_path, 'rb' ), // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- Required by AWS SDK for efficient streaming.
+					'Body'   => $file_handle,
 					'ACL'    => 'public-read',
 				)
 			);
 			return true;
 		} catch ( AwsException $e ) {
+			error_log(
+				sprintf(
+					'Hetzner Offload: S3 upload failed for %s -> %s: %s',
+					$local_path,
+					$s3_key,
+					$e->getMessage()
+				)
+			);
 			return false;
+		} finally {
+			if ( $file_handle && is_resource( $file_handle ) ) {
+				fclose( $file_handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- Required to close handle opened for AWS SDK.
+			}
 		}
 	}
 
@@ -193,6 +212,13 @@ class S3Handler {
 			);
 			return true;
 		} catch ( AwsException $e ) {
+			error_log(
+				sprintf(
+					'Hetzner Offload: S3 delete failed for %s: %s',
+					$s3_key,
+					$e->getMessage()
+				)
+			);
 			return false;
 		}
 	}
@@ -211,8 +237,30 @@ class S3Handler {
 		try {
 			return $this->s3_client->doesObjectExist( $this->bucket, $s3_key );
 		} catch ( AwsException $e ) {
+			error_log(
+				sprintf(
+					'Hetzner Offload: S3 object existence check failed for %s: %s',
+					$s3_key,
+					$e->getMessage()
+				)
+			);
 			return false;
 		}
+	}
+
+	/**
+	 * Normalize directory path for use in file operations
+	 *
+	 * Converts '.' and '/' to empty string, ensures trailing slash for others.
+	 *
+	 * @param string $path Directory path to normalize.
+	 * @return string Normalized directory path.
+	 */
+	public function normalize_directory_path( $path ) {
+		if ( $path === '.' || $path === DIRECTORY_SEPARATOR ) {
+			return '';
+		}
+		return rtrim( $path, '/' ) . '/';
 	}
 
 	/**
@@ -276,6 +324,13 @@ class S3Handler {
 				$objects[] = $object;
 			}
 		} catch ( AwsException $e ) {
+			error_log(
+				sprintf(
+					'Hetzner Offload: S3 list objects failed for prefix %s: %s',
+					$prefix,
+					$e->getMessage()
+				)
+			);
 			return array();
 		}
 

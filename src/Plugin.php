@@ -144,31 +144,4 @@ class Plugin {
 		// Register settings page.
 		$this->settings_page->register();
 	}
-
-	/**
-	 * Get S3 Handler instance
-	 *
-	 * @return S3Handler
-	 */
-	public function get_s3_handler() {
-		return $this->s3_handler;
-	}
-
-	/**
-	 * Get initialization errors
-	 *
-	 * @return array
-	 */
-	public function get_init_errors() {
-		return $this->init_errors;
-	}
-
-	/**
-	 * Check if plugin is fully enabled
-	 *
-	 * @return bool
-	 */
-	public function is_enabled() {
-		return $this->plugin_enabled;
-	}
 }

@@ -95,10 +95,7 @@ class UploadHandler {
 
 		// Upload thumbnails.
 		if ( isset( $data['sizes'] ) && is_array( $data['sizes'] ) ) {
-			$primary_file_dir = dirname( $primary_wp_meta_path );
-			if ( $primary_file_dir === '.' ) {
-				$primary_file_dir = '';
-			}
+			$primary_file_dir = $this->s3_handler->normalize_directory_path( dirname( $primary_wp_meta_path ) );
 
 			foreach ( $data['sizes'] as $size_name => $size_info ) {
 				if ( empty( $size_info['file'] ) ) {
@@ -106,7 +103,7 @@ class UploadHandler {
 				}
 
 				$thumbnail_filename = $size_info['file'];
-				$local_thumb_path   = $base_upload_path . '/' . ( $primary_file_dir ? $primary_file_dir . '/' : '' ) . $thumbnail_filename;
+				$local_thumb_path   = $base_upload_path . '/' . $primary_file_dir . $thumbnail_filename;
 				$s3_thumb_key       = $this->s3_handler->path_to_s3_key( $local_thumb_path );
 
 				if ( file_exists( $local_thumb_path ) && $this->s3_handler->upload_file( $local_thumb_path, $s3_thumb_key ) ) {
@@ -152,12 +149,7 @@ class UploadHandler {
 		// Delete thumbnails.
 		$metadata = wp_get_attachment_metadata( $attachment_id );
 		if ( isset( $metadata['sizes'] ) && is_array( $metadata['sizes'] ) ) {
-			$base_dir = dirname( $wp_meta_path );
-			if ( $base_dir === '.' || $base_dir === DIRECTORY_SEPARATOR ) {
-				$base_dir = '';
-			} else {
-				$base_dir .= '/';
-			}
+			$base_dir = $this->s3_handler->normalize_directory_path( dirname( $wp_meta_path ) );
 
 			foreach ( $metadata['sizes'] as $size_name => $size_info ) {
 				if ( empty( $size_info['file'] ) ) {
@@ -173,12 +165,9 @@ class UploadHandler {
 
 		// Delete true original if exists.
 		$original_image = wp_get_original_image_path( $attachment_id );
-		if ( $original_image ) {
-			$relative_original = str_replace( $wp_upload_dir['basedir'] . '/', '', $original_image );
-			if ( $relative_original !== $wp_meta_path ) {
-				$s3_original_key = $this->s3_handler->path_to_s3_key( $original_image );
-				$this->s3_handler->delete_object( $s3_original_key );
-			}
+		if ( $original_image && $original_image !== $local_main_path ) {
+			$s3_original_key = $this->s3_handler->path_to_s3_key( $original_image );
+			$this->s3_handler->delete_object( $s3_original_key );
 		}
 	}
 }

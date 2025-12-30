@@ -98,13 +98,8 @@ class UrlRewriter {
 			return $sources;
 		}
 
-		$base_dir = dirname( $original_file_key );
-		if ( $base_dir === '.' || $base_dir === DIRECTORY_SEPARATOR ) {
-			$base_dir = '';
-		} else {
-			$base_dir .= '/';
-		}
-
+		$wp_upload_dir     = wp_upload_dir();
+		$base_dir          = $this->s3_handler->normalize_directory_path( dirname( $original_file_key ) );
 		$original_basename = basename( $original_file_key );
 
 		foreach ( $sources as $width => &$source_data ) {
@@ -123,7 +118,14 @@ class UrlRewriter {
 			}
 
 			if ( ! empty( $wp_meta_path ) ) {
-				$source_data['url'] = $this->s3_handler->get_url( $wp_meta_path );
+				// Construct full local path to properly handle multisite paths.
+				$local_path = $wp_upload_dir['basedir'] . '/' . $wp_meta_path;
+
+				// Get S3 key and strip 'uploads/' prefix for get_url().
+				$s3_key              = $this->s3_handler->path_to_s3_key( $local_path );
+				$key_without_uploads = preg_replace( '#^uploads/#', '', $s3_key );
+
+				$source_data['url'] = $this->s3_handler->get_url( $key_without_uploads );
 			}
 		}
 
