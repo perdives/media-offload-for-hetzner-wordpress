@@ -242,11 +242,6 @@ class VerificationService {
 			}
 
 			++$paged;
-
-			// Free memory.
-			if ( function_exists( '\WP_CLI\Utils\stop_the_insanity' ) ) {
-				\WP_CLI\Utils\stop_the_insanity();
-			}
 		} while ( $query->max_num_pages >= $paged );
 	}
 
