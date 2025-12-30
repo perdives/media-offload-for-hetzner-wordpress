@@ -158,19 +158,24 @@ class Commands {
 	 *
 	 * [--delete-s3-orphans]
 	 * : If an S3 object is found in the 'uploads/' prefix that does not correspond to any
-	 *   WordPress media library entry, delete it from S3. Use with caution.
+	 *   WordPress media library entry, delete it from S3. Requires confirmation unless --yes is passed.
 	 *
 	 * [--cleanup-local]
 	 * : If local files exist for attachments that are confirmed to be on S3, delete the local copies.
+	 *   Requires confirmation unless --yes is passed.
 	 *
 	 * [--dry-run]
 	 * : Perform a dry run. Report actions that would be taken but do not actually
 	 *   upload or delete any files.
 	 *
+	 * [--yes]
+	 * : Answer yes to all confirmation prompts. Use with caution for destructive operations.
+	 *
 	 * ## EXAMPLES
 	 *
 	 *     wp hetzner-offload verify
 	 *     wp hetzner-offload verify --reupload-missing --dry-run
+	 *     wp hetzner-offload verify --delete-s3-orphans --yes
 	 *
 	 * @param array $args       Positional arguments.
 	 * @param array $assoc_args Associative arguments.
@@ -192,6 +197,23 @@ class Commands {
 
 		if ( $dry_run ) {
 			WP_CLI::warning( WP_CLI::colorize( '%YDry run mode enabled. No actual changes will be made.%n' ) );
+		}
+
+		// Confirm destructive operations before proceeding (skip if dry-run).
+		if ( ! $dry_run ) {
+			if ( $delete_s3_orphans ) {
+				WP_CLI::warning( WP_CLI::colorize( '%R--delete-s3-orphans flag detected!%n' ) );
+				WP_CLI::line( 'This will permanently delete S3 objects that don\'t correspond to WordPress media entries.' );
+				WP_CLI::line( 'This action cannot be undone.' );
+				WP_CLI::confirm( WP_CLI::colorize( '%YAre you sure you want to delete S3 orphan files?%n' ), $assoc_args );
+			}
+
+			if ( $cleanup_local ) {
+				WP_CLI::warning( WP_CLI::colorize( '%R--cleanup-local flag detected!%n' ) );
+				WP_CLI::line( 'This will permanently delete local files that exist on S3.' );
+				WP_CLI::line( 'Make sure your S3 backups are reliable before proceeding.' );
+				WP_CLI::confirm( WP_CLI::colorize( '%YAre you sure you want to delete local files?%n' ), $assoc_args );
+			}
 		}
 
 		// Pre-fetch all S3 keys.
