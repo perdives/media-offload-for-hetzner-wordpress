@@ -111,7 +111,7 @@ class SettingsPage {
 		$settings_link = sprintf(
 			'<a href="%s">%s</a>',
 			$settings_url,
-			__( 'Settings', 'media-offload-for-hetzner' )
+			__( 'Settings', 'media-offload-for-hetzner-wordpress' )
 		);
 
 		array_unshift( $links, $settings_link );

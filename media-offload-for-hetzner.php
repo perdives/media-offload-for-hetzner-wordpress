@@ -10,7 +10,7 @@
  * Author URI: https://perdives.com
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain: media-offload-for-hetzner
+ * Text Domain: media-offload-for-hetzner-wordpress
  * Domain Path: /languages
  *
  * @package HetznerOffload
@@ -38,7 +38,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Initialize the Hetzner Offload plugin.
  */
-function perdives_mo_init() {
+function perdives_mo_init() { // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound -- Using consistent perdives_mo prefix throughout plugin.
 	HetznerOffload\Plugin::get_instance();
 }
 
@@ -55,10 +55,10 @@ if ( ! perdives_check_php_version( __FILE__, '8.1' ) ) {
 require_once __DIR__ . '/vendor/autoload.php';
 
 // Initialize Plugin Update Checker.
-$perdives_mo_update_checker = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+$perdives_mo_update_checker = YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker( // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedVariableFound -- Using consistent perdives_mo prefix throughout plugin.
 	'https://github.com/perdives/media-offload-for-hetzner-wordpress',
 	__FILE__,
-	'media-offload-for-hetzner'
+	'media-offload-for-hetzner-wordpress'
 );
 
 // Check for GitHub releases instead of branch commits.
