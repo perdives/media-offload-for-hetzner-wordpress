@@ -30,6 +30,7 @@ jobs:
       - name: Build plugin package
         uses: perdives/wp-plugin-actions/build-plugin@main
         with:
+          plugin-slug: 'media-offload-for-hetzner'
           plugin-file: 'media-offload-for-hetzner.php'
           generate-checksum: true
 
