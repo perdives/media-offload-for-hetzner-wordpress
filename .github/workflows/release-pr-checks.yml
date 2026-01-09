@@ -18,21 +18,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '7.4'
-          tools: composer:v2
-
-      - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+      - uses: actions/checkout@v4
 
       - name: Run PHPCS
         id: phpcs
-        uses: perdives/wp-plugin-actions/phpcs-check@v0.1
+        uses: perdives/wp-plugin-actions/phpcs-check@main
         with:
           command: 'composer phpcs:check'
           fail_on_error: false
@@ -93,21 +83,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup PHP
-        uses: shivammathur/setup-php@v2
-        with:
-          php-version: '7.4'
-          tools: composer:v2
-
-      - name: Install Composer dependencies
-        run: composer install --no-dev --optimize-autoloader
+      - uses: actions/checkout@v4
 
       - name: Run Plugin Check
         id: plugin-check
-        uses: perdives/wp-plugin-actions/plugin-check@v0.1
+        uses: perdives/wp-plugin-actions/plugin-check@main
         with:
           fail_on_error: false
 
