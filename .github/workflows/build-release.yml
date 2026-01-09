@@ -25,14 +25,14 @@ jobs:
         id: version
         uses: perdives/wp-plugin-actions/get-plugin-version@main
         with:
-          plugin-file: 'media-offload-for-hetzner.php'
+          plugin_file: 'media-offload-for-hetzner.php'
 
       - name: Build plugin package
         uses: perdives/wp-plugin-actions/build-plugin@main
         with:
-          plugin-slug: 'media-offload-for-hetzner'
-          plugin-file: 'media-offload-for-hetzner.php'
-          generate-checksum: true
+          plugin_slug: 'media-offload-for-hetzner'
+          plugin_file: 'media-offload-for-hetzner.php'
+          generate_checksum: true
 
       - name: Upload assets to release
         uses: perdives/wp-plugin-actions/upload-to-release@main
